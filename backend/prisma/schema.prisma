@@ -1,0 +1,17 @@
+// Wave Burger — Prisma schema
+//
+// Etapa 4 (estrutura inicial): apenas datasource e generator.
+// Nenhuma entidade de negócio deve ser adicionada aqui antes da Etapa 5
+// (Organization/BusinessUnit) e das etapas subsequentes do roteiro.
+//
+// Convenção obrigatória (ver claude/CLAUDE.md, Seção 3 e 5):
+// valores monetários/custo sempre com @db.Decimal, nunca Float.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
