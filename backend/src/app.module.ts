@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
+import { IngredientsModule } from './ingredients/ingredients.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuditModule } from './audit/audit.module';
     AuditModule,
     AuthModule,
     UsersModule,
+    IngredientsModule,
   ],
   controllers: [HealthController],
   providers: [],

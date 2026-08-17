@@ -28,6 +28,7 @@ model Organization {
   businessUnits BusinessUnit[]
   users         User[]
   auditLogs     AuditLog[]
+  ingredients   Ingredient[]
 
   @@map("organizations")
 }
@@ -157,4 +158,43 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+/// Ingrediente / matéria-prima (RF-009). Catálogo compartilhado no nível
+/// da Organization — não por BusinessUnit — já que receitas/fichas
+/// técnicas normalmente são as mesmas entre unidades de uma mesma marca
+/// (decisão registrada em claude/CLAUDE.md, Etapa 8; revisar se o negócio
+/// precisar de catálogos distintos por unidade no futuro).
+///
+/// Fonte única da verdade do custo (BR-003) — nenhum outro módulo deve
+/// armazenar custo de ingrediente duplicado.
+///
+/// Campo `currentStock` (RF-009) deliberadamente OMITIDO nesta etapa:
+/// é responsabilidade do módulo de Estoque (Etapa 13), que ainda não
+/// existe. `minimumStock` é apenas o limite configurado (RF-018), não
+/// um saldo.
+///
+/// `standardUnit` é texto livre validado por uma lista prática no DTO —
+/// não resolve PD-011 (conversão de unidades entre compra/ingrediente/
+/// ficha técnica), que segue em aberto.
+model Ingredient {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  name             String
+  category         String?
+  standardUnit     String    @map("standard_unit")
+  storageLocation  String?   @map("storage_location")
+  minimumStock     Decimal?  @map("minimum_stock") @db.Decimal(12, 3)
+  averageCost      Decimal?  @map("average_cost") @db.Decimal(12, 4)
+  lastCost         Decimal?  @map("last_cost") @db.Decimal(12, 4)
+  lastPurchaseDate DateTime? @map("last_purchase_date")
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("ingredients")
 }

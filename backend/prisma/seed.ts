@@ -8,6 +8,8 @@ const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
 const PERMISSIONS = [
   { key: 'users:manage', description: 'Criar, editar e inativar usuários' },
   { key: 'roles:manage', description: 'Gerenciar perfis e permissões' },
+  { key: 'ingredients:read', description: 'Consultar ingredientes' },
+  { key: 'ingredients:manage', description: 'Criar, editar, ativar e inativar ingredientes' },
 ];
 
 /// Perfis iniciais do roteiro (Etapa 6). Mapeamento de permissões por perfil
