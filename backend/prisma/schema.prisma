@@ -27,6 +27,7 @@ model Organization {
 
   businessUnits BusinessUnit[]
   users         User[]
+  auditLogs     AuditLog[]
 
   @@map("organizations")
 }
@@ -68,6 +69,7 @@ model User {
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   roles        UserRole[]
+  auditLogs    AuditLog[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -126,4 +128,33 @@ model UserRole {
   @@id([userId, roleId])
   @@index([roleId])
   @@map("user_roles")
+}
+
+/// Mecanismo central e reutilizável de auditoria (RF-033, BR-013, BR-015).
+/// Nenhum módulo de negócio implementa auditoria própria — todos reutilizam
+/// esta tabela via AuditService (claude/CLAUDE.md, Seção 4 e 7).
+///
+/// Append-only: a migration cria triggers no PostgreSQL que bloqueiam
+/// UPDATE/DELETE nesta tabela (claude/CLAUDE.md, Seção 6). Correções são
+/// feitas por novos registros, nunca por edição do histórico.
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  action         String
+  entity         String
+  entityId       String   @map("entity_id") @db.Uuid
+  previousValue  Json?    @map("previous_value")
+  newValue       Json?    @map("new_value")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
