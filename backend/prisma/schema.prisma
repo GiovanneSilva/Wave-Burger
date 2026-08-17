@@ -1,11 +1,12 @@
 // Wave Burger — Prisma schema
 //
-// Etapa 4 (estrutura inicial): apenas datasource e generator.
-// Nenhuma entidade de negócio deve ser adicionada aqui antes da Etapa 5
-// (Organization/BusinessUnit) e das etapas subsequentes do roteiro.
+// Etapa 5: fundação organizacional (Organization/BusinessUnit).
+// Nenhuma entidade de Produto, Estoque, Financeiro ou iFood deve ser
+// adicionada aqui antes das etapas correspondentes do roteiro.
 //
 // Convenção obrigatória (ver claude/CLAUDE.md, Seção 3 e 5):
 // valores monetários/custo sempre com @db.Decimal, nunca Float.
+// IDs de entidades de negócio sempre em UUID (ver claude/CLAUDE.md, Seção 3 e 6).
 
 generator client {
   provider = "prisma-client-js"
@@ -14,4 +15,34 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+/// Organização (tenant raiz). Suporta expansão futura para franquias
+/// sem exigir reconstrução conceitual (Documento Mestre, OBJ-007).
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  businessUnits BusinessUnit[]
+
+  @@map("organizations")
+}
+
+/// Unidade de negócio dentro de uma Organization. Deve existir desde a
+/// fundação do banco mesmo que o MVP opere com uma única unidade
+/// (claude/CLAUDE.md, Seção 3 — "multi-unidade desde o início").
+model BusinessUnit {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("business_units")
 }

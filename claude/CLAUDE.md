@@ -125,3 +125,4 @@ Qualquer decisão tomada durante a implementação (resolução de uma pendênci
 | 2026-08-17 | Leitura da documentação validada pelo usuário | Etapa 1 |
 | 2026-08-17 | CLAUDE.md criado | Etapa 2 |
 | 2026-08-17 | Stack técnica confirmada: Next.js+TS (front), NestJS+TS (back), PostgreSQL, Prisma, Jest, Playwright, Docker | Etapa 3 |
+| 2026-08-17 | Fundação organizacional criada: Organization/BusinessUnit (UUID, FK RESTRICT, unique [organizationId, name]), migration versionada, seed mínimo. `prisma generate`/`migrate dev` bloqueados no sandbox de desenvolvimento (binário do engine); migration validada via SQL direto + testes automatizados com driver `pg` (7/7 passando) | Etapa 5 |
