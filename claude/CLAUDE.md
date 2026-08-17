@@ -32,7 +32,25 @@ Módulos adicionais tratados pelo roadmap de implementação, mas ainda sem espe
 
 ## 3. Arquitetura
 
-**Stack técnica definitiva: PENDENTE.** Será definida e registrada aqui na Etapa 3 do roteiro de implementação. Nenhum código de produção deve ser escrito antes dessa decisão.
+**Stack técnica definitiva (Etapa 3 — confirmada em 17/08/2026):**
+
+- **Frontend:** Next.js + TypeScript
+- **Backend:** NestJS + TypeScript
+- **Banco de dados:** PostgreSQL
+- **ORM:** Prisma
+- **Testes backend:** Jest
+- **Testes end-to-end:** Playwright
+- **Ambiente local:** Docker
+
+Justificativa (avaliada contra simplicidade, manutenção, geração de código com IA, integração futura com iFood e crescimento multi-unidade):
+
+- TypeScript ponta a ponta reduz erro de contrato entre frontend e backend, e é a combinação mais bem representada em geração de código por IA, reduzindo risco de alucinação de API.
+- NestJS oferece módulos com injeção de dependência que mapeiam diretamente para a exigência de modularidade e isolamento de integrações externas (Seção 1.7/8 do Documento Mestre) — a futura integração com iFood poderá ser implementada como módulo/adapter isolado sem vazar seu formato para o domínio.
+- PostgreSQL + Prisma suportam nativamente tipo `NUMERIC`/`Decimal`, atendendo à regra de nunca usar `float`/`double` para valores monetários (Seção 5 deste documento).
+- PostgreSQL lida bem com o modelo relacional multi-tenant (`Organization`/`BusinessUnit`) exigido desde a fundação do banco (Seção 3, princípio "multi-unidade desde o início").
+- Prisma facilita migrations versionadas e reversíveis, alinhado à Seção 6 e 9 deste documento.
+
+**Convenção obrigatória decorrente da stack:** todo valor monetário ou de custo deve usar o tipo `Decimal` do Prisma/PostgreSQL (nunca `number`/`float` em TypeScript) em qualquer camada — modelo, DTO, cálculo ou serialização.
 
 Princípios arquiteturais já válidos independentemente da stack escolhida (derivados da Seção 1.7 e 8 do Documento Mestre):
 
@@ -106,3 +124,4 @@ Qualquer decisão tomada durante a implementação (resolução de uma pendênci
 |------|---------|-------|
 | 2026-08-17 | Leitura da documentação validada pelo usuário | Etapa 1 |
 | 2026-08-17 | CLAUDE.md criado | Etapa 2 |
+| 2026-08-17 | Stack técnica confirmada: Next.js+TS (front), NestJS+TS (back), PostgreSQL, Prisma, Jest, Playwright, Docker | Etapa 3 |
