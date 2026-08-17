@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
 import { IngredientsModule } from './ingredients/ingredients.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { IngredientsModule } from './ingredients/ingredients.module';
     AuthModule,
     UsersModule,
     IngredientsModule,
+    ProductsModule,
   ],
   controllers: [HealthController],
   providers: [],

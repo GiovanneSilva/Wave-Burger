@@ -12,6 +12,8 @@ export const PERMISSIONS = {
   ROLES_MANAGE: 'roles:manage',
   INGREDIENTS_READ: 'ingredients:read',
   INGREDIENTS_MANAGE: 'ingredients:manage',
+  PRODUCTS_READ: 'products:read',
+  PRODUCTS_MANAGE: 'products:manage',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -10,6 +10,8 @@ const PERMISSIONS = [
   { key: 'roles:manage', description: 'Gerenciar perfis e permissões' },
   { key: 'ingredients:read', description: 'Consultar ingredientes' },
   { key: 'ingredients:manage', description: 'Criar, editar, ativar e inativar ingredientes' },
+  { key: 'products:read', description: 'Consultar produtos' },
+  { key: 'products:manage', description: 'Criar, editar, ativar e inativar produtos' },
 ];
 
 /// Perfis iniciais do roteiro (Etapa 6). Mapeamento de permissões por perfil
