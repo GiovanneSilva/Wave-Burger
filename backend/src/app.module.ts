@@ -8,6 +8,7 @@ import { AuditModule } from './audit/audit.module';
 import { IngredientsModule } from './ingredients/ingredients.module';
 import { ProductsModule } from './products/products.module';
 import { FichaTecnicaModule } from './ficha-tecnica/ficha-tecnica.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { FichaTecnicaModule } from './ficha-tecnica/ficha-tecnica.module';
     IngredientsModule,
     ProductsModule,
     FichaTecnicaModule,
+    SuppliersModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -30,6 +30,7 @@ model Organization {
   auditLogs     AuditLog[]
   ingredients   Ingredient[]
   products      Product[]
+  suppliers     Supplier[]
 
   @@map("organizations")
 }
@@ -196,6 +197,7 @@ model Ingredient {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   fichaTecnicaItems FichaTecnicaItem[]
+  supplierLinks SupplierIngredient[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -307,4 +309,55 @@ model FichaTecnicaItem {
   @@index([fichaTecnicaId])
   @@index([ingredientId])
   @@map("ficha_tecnica_items")
+}
+
+/// Fornecedor (RF-011). Catálogo por Organization, mesmo critério de
+/// Ingredient/Product. Nunca excluído fisicamente — apenas inativado
+/// (mesma consistência arquitetural aplicada às demais entidades
+/// operacionais).
+model Supplier {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  name                String
+  taxId               String?  @map("tax_id")
+  contactName         String?  @map("contact_name")
+  contactPhone        String?  @map("contact_phone")
+  contactEmail        String?  @map("contact_email")
+  paymentTerms        String?  @map("payment_terms")
+  averageDeliveryDays Int?     @map("average_delivery_days")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ingredientLinks SupplierIngredient[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("suppliers")
+}
+
+/// Relação N:N entre Fornecedor e Ingrediente (RF-012): "um ingrediente
+/// poderá possuir múltiplos fornecedores". `isPreferred` marca o
+/// fornecedor preferencial de um ingrediente — só um por ingrediente,
+/// garantido por índice único PARCIAL no PostgreSQL (mesma técnica da
+/// Etapa 10 para "versão corrente"; ver migration).
+///
+/// RF-013 (histórico de preços) depende do módulo de Compras (Etapa 12,
+/// ainda não implementado) — esta tabela só relaciona fornecedor e
+/// ingrediente, sem histórico de preço ainda.
+model SupplierIngredient {
+  id           String   @id @default(uuid()) @db.Uuid
+  supplierId   String   @map("supplier_id") @db.Uuid
+  ingredientId String   @map("ingredient_id") @db.Uuid
+  isPreferred  Boolean  @default(false) @map("is_preferred")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  supplier   Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, ingredientId])
+  @@index([supplierId])
+  @@index([ingredientId])
+  @@map("supplier_ingredients")
 }
