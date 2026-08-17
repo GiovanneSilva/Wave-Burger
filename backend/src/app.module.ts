@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
 import { IngredientsModule } from './ingredients/ingredients.module';
 import { ProductsModule } from './products/products.module';
+import { FichaTecnicaModule } from './ficha-tecnica/ficha-tecnica.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ProductsModule } from './products/products.module';
     UsersModule,
     IngredientsModule,
     ProductsModule,
+    FichaTecnicaModule,
   ],
   controllers: [HealthController],
   providers: [],

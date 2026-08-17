@@ -12,6 +12,8 @@ const PERMISSIONS = [
   { key: 'ingredients:manage', description: 'Criar, editar, ativar e inativar ingredientes' },
   { key: 'products:read', description: 'Consultar produtos' },
   { key: 'products:manage', description: 'Criar, editar, ativar e inativar produtos' },
+  { key: 'ficha_tecnica:read', description: 'Consultar fichas técnicas' },
+  { key: 'ficha_tecnica:manage', description: 'Criar novas versões de ficha técnica' },
 ];
 
 /// Perfis iniciais do roteiro (Etapa 6). Mapeamento de permissões por perfil

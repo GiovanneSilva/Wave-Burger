@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   INGREDIENTS_MANAGE: 'ingredients:manage',
   PRODUCTS_READ: 'products:read',
   PRODUCTS_MANAGE: 'products:manage',
+  FICHA_TECNICA_READ: 'ficha_tecnica:read',
+  FICHA_TECNICA_MANAGE: 'ficha_tecnica:manage',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

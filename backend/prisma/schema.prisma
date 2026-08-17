@@ -72,6 +72,7 @@ model User {
   businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   roles        UserRole[]
   auditLogs    AuditLog[]
+  fichasTecnicasCreated FichaTecnica[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -194,6 +195,7 @@ model Ingredient {
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  fichaTecnicaItems FichaTecnicaItem[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -235,10 +237,74 @@ model Product {
   updatedAt              DateTime      @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  fichasTecnicas FichaTecnica[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, internalCode])
   @@index([organizationId])
   @@index([status])
   @@map("products")
+}
+
+/// Ficha Técnica — núcleo funcional do Wave Burger (RF-004 a RF-007).
+/// Versionada e IMUTÁVEL por versão: cada alteração de composição cria
+/// uma nova linha (nunca UPDATE em uma versão existente), preservando
+/// histórico completo (BR-005, claude/CLAUDE.md Seção 4).
+///
+/// Apenas uma versão por produto tem isCurrent=true — reforçado por
+/// índice único parcial no PostgreSQL (ver migration; Prisma não expressa
+/// índices parciais na sintaxe estável do schema).
+///
+/// Os campos de custo/indicador aqui são um SNAPSHOT calculado no momento
+/// da criação desta versão (RF-004: "custo utilizado no cálculo"). Para
+/// números atualizados com o custo CORRENTE dos ingredientes (BR-004),
+/// use FichaTecnicaService.getCurrentCostSummary — que recalcula sob
+/// demanda sem jamais reescrever uma versão histórica.
+///
+/// totalCost = ingredientsCost (soma dos itens). Não inclui custos
+/// indiretos (energia, gás, mão de obra) — PD-003 segue sem definição.
+model FichaTecnica {
+  id               String   @id @default(uuid()) @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  version          Int
+  isCurrent        Boolean  @default(true) @map("is_current")
+  ingredientsCost  Decimal  @map("ingredients_cost") @db.Decimal(12, 4)
+  totalCost        Decimal  @map("total_cost") @db.Decimal(12, 4)
+  cmvPercentage    Decimal? @map("cmv_percentage") @db.Decimal(9, 4)
+  markup           Decimal? @db.Decimal(10, 4)
+  marginPercentage Decimal? @map("margin_percentage") @db.Decimal(9, 4)
+  estimatedProfit  Decimal? @map("estimated_profit") @db.Decimal(12, 4)
+  createdByUserId  String   @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  product       Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdByUser User               @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items         FichaTecnicaItem[]
+
+  @@unique([productId, version])
+  @@index([productId])
+  @@map("fichas_tecnicas")
+}
+
+/// Item de composição de uma ficha técnica (RF-004). `costSnapshot` é o
+/// custo por unidade padrão do ingrediente, congelado no momento da
+/// criação desta versão (BR-005). `unit` deve ser métrica-compatível com
+/// o `standardUnit` do ingrediente (kg↔g, l↔ml) — conversões entre
+/// famílias diferentes (ex.: kg→un) permanecem bloqueadas por PD-011.
+model FichaTecnicaItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  fichaTecnicaId String  @map("ficha_tecnica_id") @db.Uuid
+  ingredientId   String  @map("ingredient_id") @db.Uuid
+  quantity       Decimal @db.Decimal(12, 4)
+  unit           String
+  lossPercentage Decimal @default(0) @map("loss_percentage") @db.Decimal(5, 2)
+  costSnapshot   Decimal @map("cost_snapshot") @db.Decimal(12, 4)
+  lineCost       Decimal @map("line_cost") @db.Decimal(12, 4)
+
+  fichaTecnica FichaTecnica @relation(fields: [fichaTecnicaId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@index([fichaTecnicaId])
+  @@index([ingredientId])
+  @@map("ficha_tecnica_items")
 }
