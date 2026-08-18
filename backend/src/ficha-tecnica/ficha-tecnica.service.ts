@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateFichaTecnicaDto } from './dto/create-ficha-tecnica.dto';
+import { SimulateFichaTecnicaDto } from './dto/simulate-ficha-tecnica.dto';
 import { calculateItemCost, calculateTotals } from './ficha-tecnica-calculator';
 
 interface ActingUser {
@@ -209,6 +210,103 @@ export class FichaTecnicaService {
     };
   }
 
+  /// RF-008: simula alterações na ficha técnica ANTES de aplicá-las —
+  /// nenhuma escrita ocorre (nem nova versão, nem alteração de custo do
+  /// ingrediente). Cobre os 4 exemplos do RF-008:
+  ///   - "aumentar gramatura": mudar `quantity` de um item;
+  ///   - "trocar fornecedor": usar `costOverride` (preço hipotético,
+  ///     sem alterar Ingredient.averageCost de verdade);
+  ///   - "alterar preço" / "conceder desconto": usar `salePriceOverride`.
+  /// Reutiliza os mesmos calculateItemCost/calculateTotals da criação
+  /// real de ficha técnica (Etapa 10) — nenhum cálculo duplicado.
+  ///
+  /// Não gera auditoria: uma simulação não muda estado nenhum, então não
+  /// é uma "ação crítica" no sentido de RF-033.
+  async simulate(productId: string, dto: SimulateFichaTecnicaDto, organizationId: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, organizationId },
+    });
+    if (!product) {
+      throw new NotFoundException('Produto não encontrado.');
+    }
+
+    const ingredientIds = dto.items.map((item) => item.ingredientId);
+    const ingredients = await this.prisma.ingredient.findMany({
+      where: { id: { in: ingredientIds }, organizationId },
+    });
+    const ingredientById = new Map<string, IngredientRecord>(
+      ingredients.map((i: IngredientRecord) => [i.id, i]),
+    );
+
+    const itemResults = dto.items.map((itemDto) => {
+      const ingredient = ingredientById.get(itemDto.ingredientId);
+      if (!ingredient) {
+        throw new NotFoundException(`Ingrediente ${itemDto.ingredientId} não encontrado.`);
+      }
+
+      const costPerStandardUnit = itemDto.costOverride
+        ? Number(itemDto.costOverride)
+        : ingredient.averageCost !== null
+          ? Number(ingredient.averageCost)
+          : null;
+
+      if (costPerStandardUnit === null) {
+        throw new UnprocessableEntityException(
+          `O ingrediente "${ingredient.name}" não possui custo médio cadastrado e nenhum costOverride foi informado.`,
+        );
+      }
+
+      const { lineCost } = calculateItemCost({
+        quantity: Number(itemDto.quantity),
+        unit: itemDto.unit,
+        ingredientStandardUnit: ingredient.standardUnit,
+        lossPercentage: itemDto.lossPercentage ?? 0,
+        costPerStandardUnit,
+      });
+
+      return {
+        ingredientId: ingredient.id,
+        ingredientName: ingredient.name,
+        quantity: itemDto.quantity,
+        unit: itemDto.unit,
+        costPerStandardUnitUsed: costPerStandardUnit,
+        isSimulatedCost: Boolean(itemDto.costOverride),
+        lineCost,
+      };
+    });
+
+    const salePrice = dto.salePriceOverride
+      ? Number(dto.salePriceOverride)
+      : product.salePrice
+        ? Number(product.salePrice)
+        : null;
+
+    const simulatedTotals = calculateTotals(
+      itemResults.map((i) => i.lineCost),
+      salePrice,
+    );
+
+    const currentFicha = await this.prisma.fichaTecnica.findFirst({
+      where: { productId, isCurrent: true },
+    });
+
+    return {
+      productId,
+      salePriceUsed: salePrice,
+      items: itemResults,
+      simulatedTotals,
+      comparedToCurrentVersion: currentFicha
+        ? {
+            totalCostDelta: round4(simulatedTotals.totalCost - Number(currentFicha.totalCost)),
+            estimatedProfitDelta:
+              simulatedTotals.estimatedProfit !== null && currentFicha.estimatedProfit !== null
+                ? round4(simulatedTotals.estimatedProfit - Number(currentFicha.estimatedProfit))
+                : null,
+          }
+        : null,
+    };
+  }
+
   private async ensureProductBelongsToOrg(productId: string, organizationId: string) {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, organizationId },
@@ -217,4 +315,8 @@ export class FichaTecnicaService {
       throw new NotFoundException('Produto não encontrado.');
     }
   }
+}
+
+function round4(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }
