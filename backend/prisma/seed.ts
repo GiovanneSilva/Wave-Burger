@@ -18,14 +18,24 @@ const PERMISSIONS = [
   { key: 'suppliers:manage', description: 'Criar, editar, ativar e inativar fornecedores' },
   { key: 'purchases:read', description: 'Consultar compras' },
   { key: 'purchases:manage', description: 'Registrar, confirmar e cancelar compras' },
+  { key: 'stock:read', description: 'Consultar saldos e movimentações de estoque' },
+  { key: 'stock:manage', description: 'Registrar ajustes manuais de estoque' },
 ];
 
-/// Perfis iniciais do roteiro (Etapa 6). Mapeamento de permissões por perfil
-/// é mínimo nesta etapa — módulos de negócio ainda não existem, então só o
-/// perfil ADMIN recebe as permissões fundacionais já implementadas.
+/// Perfis iniciais do roteiro (Etapa 6).
+///
+/// Etapa 13: STOCK_OPERATOR recebe suas primeiras permissões reais —
+/// RF-030 descreve literalmente "registrar entradas; registrar perdas;
+/// realizar ajustes autorizados; consultar estoque", e quantidade em
+/// estoque não é "informação estratégica de lucro" (isso é custo, que
+/// continua restrito a ADMIN via ingredients:read/manage).
 const ROLES = [
   { name: 'ADMIN', description: 'Acesso completo ao sistema (RF-029)', permissions: PERMISSIONS.map((p) => p.key) },
-  { name: 'STOCK_OPERATOR', description: 'Operador de estoque (RF-030)', permissions: [] as string[] },
+  {
+    name: 'STOCK_OPERATOR',
+    description: 'Operador de estoque (RF-030)',
+    permissions: ['stock:read', 'stock:manage'],
+  },
   { name: 'FINANCE', description: 'Perfil financeiro (RF-031)', permissions: [] as string[] },
   { name: 'VIEW_ONLY', description: 'Consulta / somente leitura', permissions: [] as string[] },
 ];

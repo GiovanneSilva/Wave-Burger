@@ -49,6 +49,8 @@ model BusinessUnit {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   users        User[]
   purchases    Purchase[]
+  stockBalances  StockBalance[]
+  stockMovements StockMovement[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -78,6 +80,7 @@ model User {
   fichasTecnicasCreated FichaTecnica[]
   purchasesCreated      Purchase[]     @relation("PurchaseCreatedBy")
   purchasesConfirmed    Purchase[]     @relation("PurchaseConfirmedBy")
+  stockMovementsPerformed StockMovement[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -203,6 +206,8 @@ model Ingredient {
   fichaTecnicaItems FichaTecnicaItem[]
   supplierLinks SupplierIngredient[]
   purchaseItems PurchaseItem[]
+  stockBalances StockBalance[]
+  stockMovements StockMovement[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -407,6 +412,7 @@ model Purchase {
   createdByUser   User           @relation("PurchaseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   confirmedByUser User?          @relation("PurchaseConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: Restrict)
   items           PurchaseItem[]
+  stockMovements  StockMovement[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -430,4 +436,81 @@ model PurchaseItem {
   @@index([purchaseId])
   @@index([ingredientId])
   @@map("purchase_items")
+}
+
+enum MovementDirection {
+  IN
+  OUT
+}
+
+enum MovementSource {
+  PURCHASE
+  MANUAL_ADJUSTMENT
+  // SALE será adicionado quando o módulo de Vendas existir (Etapa 16,
+  // RF-016/BR-009 — depende de PD-010, ainda em aberto).
+}
+
+/// Motivos de ajuste manual (RF-017) — categorias explicitamente listadas
+/// no Documento Mestre, não inventadas.
+enum AdjustmentReason {
+  LOSS
+  WASTE
+  INVENTORY
+  CORRECTION
+  RETURN
+}
+
+/// Saldo atual de estoque por unidade de negócio + ingrediente (RF-009
+/// "estoque atual", deliberadamente omitido do Ingredient na Etapa 8—
+/// pertence aqui). É um cache derivado, atualizado apenas por
+/// StockMovement — nunca editado diretamente.
+model StockBalance {
+  id              String   @id @default(uuid()) @db.Uuid
+  businessUnitId  String   @map("business_unit_id") @db.Uuid
+  ingredientId    String   @map("ingredient_id") @db.Uuid
+  currentQuantity Decimal  @default(0) @map("current_quantity") @db.Decimal(14, 4)
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([businessUnitId, ingredientId])
+  @@index([businessUnitId])
+  @@index([ingredientId])
+  @@map("stock_balances")
+}
+
+/// Movimentação de estoque (RF-015, RF-017) — histórico append-only
+/// (claude/CLAUDE.md, Seção 6: "movimentações de estoque não permitem
+/// UPDATE/DELETE"), reforçado por trigger no PostgreSQL (mesma técnica de
+/// audit_logs, Etapa 7).
+///
+/// BR-010: nenhuma movimentação pode levar o saldo abaixo de zero —
+/// aplicado aqui como regra geral e segura. A ressalva de PD-001
+/// ("bloquear ou sinalizar venda sem estoque") é específica do módulo de
+/// Vendas (Etapa 16, ainda não implementado) e continua em aberto.
+model StockMovement {
+  id                    String            @id @default(uuid()) @db.Uuid
+  businessUnitId        String            @map("business_unit_id") @db.Uuid
+  ingredientId          String            @map("ingredient_id") @db.Uuid
+  direction             MovementDirection
+  source                MovementSource
+  adjustmentReason      AdjustmentReason? @map("adjustment_reason")
+  quantity              Decimal           @db.Decimal(14, 4)
+  unit                  String
+  quantityStandardUnit  Decimal           @map("quantity_standard_unit") @db.Decimal(14, 4)
+  purchaseId            String?           @map("purchase_id") @db.Uuid
+  performedByUserId     String            @map("performed_by_user_id") @db.Uuid
+  notes                 String?
+  createdAt             DateTime          @default(now()) @map("created_at")
+
+  businessUnit    BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  ingredient      Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  purchase        Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  performedByUser User         @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([businessUnitId])
+  @@index([ingredientId])
+  @@index([createdAt])
+  @@map("stock_movements")
 }
