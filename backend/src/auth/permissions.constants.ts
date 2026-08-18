@@ -22,6 +22,8 @@ export const PERMISSIONS = {
   PURCHASES_MANAGE: 'purchases:manage',
   STOCK_READ: 'stock:read',
   STOCK_MANAGE: 'stock:manage',
+  FINANCIAL_READ: 'financial:read',
+  FINANCIAL_MANAGE: 'financial:manage',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

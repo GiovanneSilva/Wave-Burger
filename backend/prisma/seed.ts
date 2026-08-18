@@ -20,6 +20,8 @@ const PERMISSIONS = [
   { key: 'purchases:manage', description: 'Registrar, confirmar e cancelar compras' },
   { key: 'stock:read', description: 'Consultar saldos e movimentações de estoque' },
   { key: 'stock:manage', description: 'Registrar ajustes manuais de estoque' },
+  { key: 'financial:read', description: 'Consultar lançamentos financeiros, fluxo de caixa e DRE' },
+  { key: 'financial:manage', description: 'Criar, editar, liquidar e cancelar lançamentos financeiros' },
 ];
 
 /// Perfis iniciais do roteiro (Etapa 6).
@@ -29,6 +31,10 @@ const PERMISSIONS = [
 /// realizar ajustes autorizados; consultar estoque", e quantidade em
 /// estoque não é "informação estratégica de lucro" (isso é custo, que
 /// continua restrito a ADMIN via ingredients:read/manage).
+///
+/// Etapa 14: FINANCE recebe suas primeiras permissões reais — RF-031
+/// descreve literalmente "contas a pagar; contas a receber; fluxo de
+/// caixa; informações financeiras autorizadas".
 const ROLES = [
   { name: 'ADMIN', description: 'Acesso completo ao sistema (RF-029)', permissions: PERMISSIONS.map((p) => p.key) },
   {
@@ -36,7 +42,11 @@ const ROLES = [
     description: 'Operador de estoque (RF-030)',
     permissions: ['stock:read', 'stock:manage'],
   },
-  { name: 'FINANCE', description: 'Perfil financeiro (RF-031)', permissions: [] as string[] },
+  {
+    name: 'FINANCE',
+    description: 'Perfil financeiro (RF-031)',
+    permissions: ['financial:read', 'financial:manage'],
+  },
   { name: 'VIEW_ONLY', description: 'Consulta / somente leitura', permissions: [] as string[] },
 ];
 

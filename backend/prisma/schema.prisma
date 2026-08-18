@@ -32,6 +32,7 @@ model Organization {
   products      Product[]
   suppliers     Supplier[]
   purchases     Purchase[]
+  financialEntries FinancialEntry[]
 
   @@map("organizations")
 }
@@ -51,6 +52,7 @@ model BusinessUnit {
   purchases    Purchase[]
   stockBalances  StockBalance[]
   stockMovements StockMovement[]
+  financialEntries FinancialEntry[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -81,6 +83,7 @@ model User {
   purchasesCreated      Purchase[]     @relation("PurchaseCreatedBy")
   purchasesConfirmed    Purchase[]     @relation("PurchaseConfirmedBy")
   stockMovementsPerformed StockMovement[]
+  financialEntriesCreated FinancialEntry[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -342,6 +345,7 @@ model Supplier {
   organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   ingredientLinks SupplierIngredient[]
   purchases       Purchase[]
+  financialEntries FinancialEntry[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -413,6 +417,7 @@ model Purchase {
   confirmedByUser User?          @relation("PurchaseConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: Restrict)
   items           PurchaseItem[]
   stockMovements  StockMovement[]
+  financialEntries FinancialEntry[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -513,4 +518,71 @@ model StockMovement {
   @@index([ingredientId])
   @@index([createdAt])
   @@map("stock_movements")
+}
+
+enum FinancialEntryType {
+  PAYABLE
+  RECEIVABLE
+}
+
+/// Categorias financeiras (RF-023) — lista explícita do Documento Mestre,
+/// não inventada.
+enum FinancialCategory {
+  MATERIA_PRIMA
+  EMBALAGEM
+  MARKETING
+  ALUGUEL
+  ENERGIA
+  PLATAFORMA
+  ADMINISTRATIVO
+  MANUTENCAO
+}
+
+enum FinancialEntryStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// Lançamento financeiro — contas a pagar (RF-021) ou a receber (RF-022).
+/// Diferente de AuditLog/StockMovement, NÃO é append-only: um lançamento
+/// tem ciclo de vida (pendente → pago/cancelado) e pode ser editado antes
+/// da liquidação.
+///
+/// BR-007: gerado automaticamente para toda compra confirmada via
+/// FinancialPurchaseListener, reagindo a `purchase.confirmed`
+/// (mesmo evento das Etapas 12/13) — terceiro listener independente do
+/// mesmo evento, sem qualquer alteração em PurchasesModule.
+model FinancialEntry {
+  id                String                @id @default(uuid()) @db.Uuid
+  organizationId    String                @map("organization_id") @db.Uuid
+  businessUnitId    String                @map("business_unit_id") @db.Uuid
+  type              FinancialEntryType
+  category          FinancialCategory
+  description       String
+  supplierId        String?               @map("supplier_id") @db.Uuid
+  purchaseId        String?               @map("purchase_id") @db.Uuid
+  grossAmount       Decimal               @map("gross_amount") @db.Decimal(14, 4)
+  netAmount         Decimal?              @map("net_amount") @db.Decimal(14, 4)
+  dueDate           DateTime?             @map("due_date")
+  settledAt         DateTime?             @map("settled_at")
+  status            FinancialEntryStatus  @default(PENDING)
+  createdByUserId   String                @map("created_by_user_id") @db.Uuid
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  businessUnit  BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  supplier      Supplier?    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchase      Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  createdByUser User         @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@index([businessUnitId])
+  @@index([type])
+  @@index([category])
+  @@index([status])
+  @@index([settledAt])
+  @@map("financial_entries")
 }

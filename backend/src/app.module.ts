@@ -12,6 +12,7 @@ import { FichaTecnicaModule } from './ficha-tecnica/ficha-tecnica.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { StockModule } from './stock/stock.module';
+import { FinancialModule } from './financial/financial.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { StockModule } from './stock/stock.module';
     SuppliersModule,
     PurchasesModule,
     StockModule,
+    FinancialModule,
   ],
   controllers: [HealthController],
   providers: [],
