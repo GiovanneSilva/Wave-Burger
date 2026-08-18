@@ -28,6 +28,8 @@ describe('StockService', () => {
 
   function mockTransaction(existingBalance: any, movementReturn: any, balanceReturn: any) {
     const txClient = {
+      ingredient: prisma.ingredient,
+      businessUnit: prisma.businessUnit,
       stockBalance: {
         findUnique: jest.fn().mockResolvedValue(existingBalance),
         upsert: jest.fn().mockResolvedValue(balanceReturn),
@@ -131,9 +133,55 @@ describe('StockService', () => {
     });
   });
 
+  describe('applyMovement — allowNegative (PD-001, suporte a Vendas)', () => {
+    it('permite saldo negativo quando allowNegative=true e sinaliza via wentNegative', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.businessUnit.findFirst.mockResolvedValue(businessUnit);
+      mockTransaction({ currentQuantity: '2.0000' }, { id: 'mov-1' }, { currentQuantity: -3 });
+
+      const result = await service.applyMovement({
+        organizationId: 'org-1',
+        businessUnitId: 'bu-1',
+        ingredientId: 'ing-1',
+        direction: 'OUT',
+        source: 'SALE',
+        saleId: 'sale-1',
+        quantity: 5, // saldo atual 2, saída de 5 -> -3
+        unit: 'kg',
+        performedByUserId: 'user-1',
+        allowNegative: true,
+      });
+
+      expect(result.wentNegative).toBe(true);
+      expect(result.balance.currentQuantity).toBe(-3);
+    });
+
+    it('wentNegative=false quando o saldo resultante não é negativo', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.businessUnit.findFirst.mockResolvedValue(businessUnit);
+      mockTransaction({ currentQuantity: '10.0000' }, { id: 'mov-1' }, { currentQuantity: 5 });
+
+      const result = await service.applyMovement({
+        organizationId: 'org-1',
+        businessUnitId: 'bu-1',
+        ingredientId: 'ing-1',
+        direction: 'OUT',
+        source: 'SALE',
+        saleId: 'sale-1',
+        quantity: 5,
+        unit: 'kg',
+        performedByUserId: 'user-1',
+        allowNegative: true,
+      });
+
+      expect(result.wentNegative).toBe(false);
+    });
+  });
+
   describe('applyMovement — validações', () => {
     it('lança NotFoundException quando o ingrediente não existe na organização', async () => {
       prisma.ingredient.findFirst.mockResolvedValue(null);
+      mockTransaction(null, null, null);
 
       await expect(
         service.applyMovement({
@@ -153,6 +201,7 @@ describe('StockService', () => {
     it('lança NotFoundException quando a unidade de negócio não existe na organização', async () => {
       prisma.ingredient.findFirst.mockResolvedValue(ingredient);
       prisma.businessUnit.findFirst.mockResolvedValue(null);
+      mockTransaction(null, null, null);
 
       await expect(
         service.applyMovement({

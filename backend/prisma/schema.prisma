@@ -33,6 +33,7 @@ model Organization {
   suppliers     Supplier[]
   purchases     Purchase[]
   financialEntries FinancialEntry[]
+  sales         Sale[]
 
   @@map("organizations")
 }
@@ -53,6 +54,7 @@ model BusinessUnit {
   stockBalances  StockBalance[]
   stockMovements StockMovement[]
   financialEntries FinancialEntry[]
+  sales          Sale[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -84,6 +86,7 @@ model User {
   purchasesConfirmed    Purchase[]     @relation("PurchaseConfirmedBy")
   stockMovementsPerformed StockMovement[]
   financialEntriesCreated FinancialEntry[]
+  salesRegistered         Sale[]
 
   @@index([organizationId])
   @@index([businessUnitId])
@@ -253,6 +256,7 @@ model Product {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   fichasTecnicas FichaTecnica[]
+  sales          Sale[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, internalCode])
@@ -451,8 +455,11 @@ enum MovementDirection {
 enum MovementSource {
   PURCHASE
   MANUAL_ADJUSTMENT
-  // SALE será adicionado quando o módulo de Vendas existir (Etapa 16,
-  // RF-016/BR-009 — depende de PD-010, ainda em aberto).
+  /// Etapa 16: consumo por venda (RF-016/BR-009). PD-001 resolvido
+  /// especificamente para este cenário — venda NUNCA é bloqueada por
+  /// falta de estoque, apenas sinalizada (ver StockMovement abaixo e
+  /// Sale.hadInsufficientStock).
+  SALE
 }
 
 /// Motivos de ajuste manual (RF-017) — categorias explicitamente listadas
@@ -491,9 +498,10 @@ model StockBalance {
 /// audit_logs, Etapa 7).
 ///
 /// BR-010: nenhuma movimentação pode levar o saldo abaixo de zero —
-/// aplicado aqui como regra geral e segura. A ressalva de PD-001
-/// ("bloquear ou sinalizar venda sem estoque") é específica do módulo de
-/// Vendas (Etapa 16, ainda não implementado) e continua em aberto.
+/// aplicado como regra geral e segura para compras e ajustes manuais.
+/// PD-001 foi resolvido na Etapa 16 especificamente para o cenário de
+/// Vendas: consumo por venda NUNCA bloqueia (allowNegative=true em
+/// StockService), apenas sinaliza via Sale.hadInsufficientStock.
 model StockMovement {
   id                    String            @id @default(uuid()) @db.Uuid
   businessUnitId        String            @map("business_unit_id") @db.Uuid
@@ -505,6 +513,7 @@ model StockMovement {
   unit                  String
   quantityStandardUnit  Decimal           @map("quantity_standard_unit") @db.Decimal(14, 4)
   purchaseId            String?           @map("purchase_id") @db.Uuid
+  saleId                String?           @map("sale_id") @db.Uuid
   performedByUserId     String            @map("performed_by_user_id") @db.Uuid
   notes                 String?
   createdAt             DateTime          @default(now()) @map("created_at")
@@ -512,6 +521,7 @@ model StockMovement {
   businessUnit    BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   ingredient      Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
   purchase        Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  sale            Sale?        @relation(fields: [saleId], references: [id], onDelete: Restrict)
   performedByUser User         @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
 
   @@index([businessUnitId])
@@ -525,8 +535,11 @@ enum FinancialEntryType {
   RECEIVABLE
 }
 
-/// Categorias financeiras (RF-023) — lista explícita do Documento Mestre,
-/// não inventada.
+/// Categorias financeiras (RF-023) — lista explícita do Documento Mestre.
+/// VENDAS foi adicionada na Etapa 16 para lançamentos RECEIVABLE gerados
+/// a partir de Sale — RF-023 só definia categorias do lado PAYABLE
+/// (despesas); receita de venda precisava de uma categoria própria para
+/// não ficar sem classificação.
 enum FinancialCategory {
   MATERIA_PRIMA
   EMBALAGEM
@@ -536,6 +549,7 @@ enum FinancialCategory {
   PLATAFORMA
   ADMINISTRATIVO
   MANUTENCAO
+  VENDAS
 }
 
 enum FinancialEntryStatus {
@@ -554,6 +568,9 @@ enum FinancialEntryStatus {
 /// FinancialPurchaseListener, reagindo a `purchase.confirmed`
 /// (mesmo evento das Etapas 12/13) — terceiro listener independente do
 /// mesmo evento, sem qualquer alteração em PurchasesModule.
+///
+/// Etapa 16: também gerado automaticamente (RECEIVABLE/VENDAS) via
+/// SalesFinancialListener, reagindo a `sale.registered`.
 model FinancialEntry {
   id                String                @id @default(uuid()) @db.Uuid
   organizationId    String                @map("organization_id") @db.Uuid
@@ -563,6 +580,7 @@ model FinancialEntry {
   description       String
   supplierId        String?               @map("supplier_id") @db.Uuid
   purchaseId        String?               @map("purchase_id") @db.Uuid
+  saleId            String?               @map("sale_id") @db.Uuid
   grossAmount       Decimal               @map("gross_amount") @db.Decimal(14, 4)
   netAmount         Decimal?              @map("net_amount") @db.Decimal(14, 4)
   dueDate           DateTime?             @map("due_date")
@@ -576,6 +594,7 @@ model FinancialEntry {
   businessUnit  BusinessUnit @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   supplier      Supplier?    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   purchase      Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  sale          Sale?        @relation(fields: [saleId], references: [id], onDelete: Restrict)
   createdByUser User         @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
@@ -585,4 +604,54 @@ model FinancialEntry {
   @@index([status])
   @@index([settledAt])
   @@map("financial_entries")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+/// Venda (Etapa 16) — escopo confirmado explicitamente com o usuário
+/// antes da implementação (PD-010, agora resolvido): um único produto
+/// por venda (produto + quantidade + preço + data), com desconto simples
+/// opcional. Pedidos com múltiplos itens/carrinho ficam para uma
+/// evolução futura, se solicitado.
+///
+/// unitPriceSnapshot é o preço efetivamente praticado nesta venda —
+/// congelado no momento do registro (pode divergir do Product.salePrice
+/// atual, que pode mudar depois).
+///
+/// hadInsufficientStock: PD-001 resolvido especificamente para Vendas —
+/// a venda NUNCA é bloqueada por falta de estoque; este campo registra
+/// que o consumo desta venda deixou algum saldo negativo (sinalização,
+/// não bloqueio). Ver stockMovements para o detalhe por ingrediente.
+model Sale {
+  id                   String        @id @default(uuid()) @db.Uuid
+  organizationId       String        @map("organization_id") @db.Uuid
+  businessUnitId       String        @map("business_unit_id") @db.Uuid
+  productId            String        @map("product_id") @db.Uuid
+  quantity             Decimal       @db.Decimal(10, 3)
+  unitPriceSnapshot    Decimal       @map("unit_price_snapshot") @db.Decimal(12, 2)
+  grossAmount          Decimal       @map("gross_amount") @db.Decimal(14, 4)
+  discountType         DiscountType? @map("discount_type")
+  discountValue        Decimal?      @map("discount_value") @db.Decimal(12, 4)
+  discountAmount       Decimal       @default(0) @map("discount_amount") @db.Decimal(14, 4)
+  netAmount            Decimal       @map("net_amount") @db.Decimal(14, 4)
+  saleDate             DateTime      @map("sale_date")
+  hadInsufficientStock Boolean       @default(false) @map("had_insufficient_stock")
+  soldByUserId         String        @map("sold_by_user_id") @db.Uuid
+  createdAt            DateTime      @default(now()) @map("created_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  businessUnit BusinessUnit    @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  soldByUser   User            @relation(fields: [soldByUserId], references: [id], onDelete: Restrict)
+  stockMovements  StockMovement[]
+  financialEntries FinancialEntry[]
+
+  @@index([organizationId])
+  @@index([businessUnitId])
+  @@index([productId])
+  @@index([saleDate])
+  @@map("sales")
 }

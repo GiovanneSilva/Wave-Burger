@@ -18,6 +18,14 @@ export interface CreateEntryFromPurchaseInput {
   createdByUserId: string;
 }
 
+export interface CreateEntryFromSaleInput {
+  organizationId: string;
+  businessUnitId: string;
+  saleId: string;
+  netAmount: number;
+  createdByUserId: string;
+}
+
 @Injectable()
 export class FinancialService {
   constructor(
@@ -83,6 +91,25 @@ export class FinancialService {
         supplierId: input.supplierId,
         purchaseId: input.purchaseId,
         grossAmount: input.grossAmount,
+        createdByUserId: input.createdByUserId,
+      },
+    });
+  }
+
+  /// Etapa 16: BR-007-like — venda registrada gera lançamento
+  /// RECEIVABLE/VENDAS automaticamente, via SalesFinancialListener
+  /// reagindo a `sale.registered`. Mesmo padrão de desacoplamento de
+  /// createEntryFromPurchase.
+  async createEntryFromSale(input: CreateEntryFromSaleInput) {
+    return this.prisma.financialEntry.create({
+      data: {
+        organizationId: input.organizationId,
+        businessUnitId: input.businessUnitId,
+        type: 'RECEIVABLE',
+        category: 'VENDAS',
+        description: `Venda registrada #${input.saleId}`,
+        saleId: input.saleId,
+        grossAmount: input.netAmount,
         createdByUserId: input.createdByUserId,
       },
     });

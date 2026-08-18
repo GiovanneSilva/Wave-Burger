@@ -22,6 +22,8 @@ const PERMISSIONS = [
   { key: 'stock:manage', description: 'Registrar ajustes manuais de estoque' },
   { key: 'financial:read', description: 'Consultar lançamentos financeiros, fluxo de caixa e DRE' },
   { key: 'financial:manage', description: 'Criar, editar, liquidar e cancelar lançamentos financeiros' },
+  { key: 'sales:read', description: 'Consultar vendas' },
+  { key: 'sales:manage', description: 'Registrar vendas' },
 ];
 
 /// Perfis iniciais do roteiro (Etapa 6).

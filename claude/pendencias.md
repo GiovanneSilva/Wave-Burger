@@ -6,7 +6,6 @@ Este arquivo rastreia decisões de negócio ainda não fechadas. Nenhuma delas d
 
 | ID | Descrição | Módulo impactado |
 |----|-----------|-------------------|
-| PD-001 | Política para venda sem estoque: bloquear ou apenas sinalizar | Estoque, Vendas |
 | PD-002 | Metodologia definitiva de custo médio e tratamento de variações | Ingredientes, Compras |
 | PD-003 | Como custos indiretos (energia, gás, mão de obra) entram na ficha técnica | Ficha Técnica |
 | PD-004 | Quando e como ocorre a integração automática com iFood | Integração iFood |
@@ -20,7 +19,6 @@ Este arquivo rastreia decisões de negócio ainda não fechadas. Nenhuma delas d
 | ID | Descrição | Módulo impactado |
 |----|-----------|-------------------|
 | PD-009 | Não existe "capítulo de integração iFood" no Documento Mestre v0.1, apesar de citado no guia de implementação (Etapa 20). Precisa ser produzido/validado antes da Etapa 20. | Integração iFood |
-| PD-010 | Não há RF formal para o módulo de Venda/Pedido manual (campos, fluxo de desconto, etc.) — só aparece como efeito colateral no Modelo de Domínio e em UC-004/UC-005. Confirmar escopo com o usuário antes da Etapa 16. | Vendas |
 | PD-011 | Não há regra definida de conversão de unidades entre compra (ex.: kg, caixa), cadastro do ingrediente (unidade padrão) e ficha técnica (quantidade usada). | Ingredientes, Compras, Ficha Técnica |
 
 ## Como usar este arquivo
@@ -31,4 +29,7 @@ Quando uma pendência for resolvida, mover a linha para a tabela "Resolvidas" ab
 
 ## Resolvidas
 
-_(nenhuma até o momento)_
+| ID | Descrição | Decisão | Data |
+|----|-----------|---------|------|
+| PD-001 | Política para venda sem estoque: bloquear ou apenas sinalizar | **Permitir e sinalizar.** A venda nunca é bloqueada por falta de estoque — o consumo é aplicado mesmo que o saldo fique negativo, e a venda registra `hadInsufficientStock=true` + lista de ingredientes afetados (`stockWarnings`) na resposta da API e no log de auditoria. Implementado em `StockService.applyMovement` via parâmetro `allowNegative`, usado apenas por Vendas — Compras e ajustes manuais continuam bloqueando saldo negativo (BR-010 inalterado para esses casos). | 2026-08-17 (Etapa 16) |
+| PD-010 | Não há RF formal para o módulo de Venda/Pedido manual (campos, fluxo de desconto, etc.) | Escopo confirmado com o usuário antes da Etapa 16: (1) uma venda representa um único produto (produto + quantidade + preço + data) — não um pedido com múltiplos itens; (2) desconto simples incluído (tipo percentual ou fixo + valor). Modelo `Sale` implementado com esse escopo. Pedidos com múltiplos itens/carrinho ficam para evolução futura, se solicitado. | 2026-08-17 (Etapa 16) |

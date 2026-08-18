@@ -14,13 +14,20 @@ export interface ApplyMovementInput {
   businessUnitId: string;
   ingredientId: string;
   direction: 'IN' | 'OUT';
-  source: 'PURCHASE' | 'MANUAL_ADJUSTMENT';
+  source: 'PURCHASE' | 'MANUAL_ADJUSTMENT' | 'SALE';
   quantity: number;
   unit: string;
   adjustmentReason?: 'LOSS' | 'WASTE' | 'INVENTORY' | 'CORRECTION' | 'RETURN';
   purchaseId?: string;
+  saleId?: string;
   performedByUserId: string;
   notes?: string;
+  /// PD-001 (resolvido na Etapa 16, especificamente para o cenário de
+  /// venda): quando true, a movimentação é aplicada mesmo que o saldo
+  /// resultante fique negativo — o chamador é responsável por sinalizar
+  /// isso (via `wentNegative` no retorno). Default false: BR-010
+  /// continua bloqueando saldo negativo para compras e ajustes manuais.
+  allowNegative?: boolean;
 }
 
 @Injectable()
@@ -30,22 +37,37 @@ export class StockService {
     private readonly auditService: AuditService,
   ) {}
 
-  /// Núcleo do módulo: aplica uma movimentação de estoque (entrada ou
-  /// saída) de forma transacional — cria o registro histórico
-  /// (StockMovement, append-only) e atualiza o saldo (StockBalance) numa
-  /// única transação. BR-010: nunca permite saldo resultante negativo.
-  ///
-  /// Chamado tanto pelo endpoint de ajuste manual (RF-017) quanto pelo
-  /// StockPurchaseListener (BR-006, reagindo a `purchase.confirmed`).
+  /// Núcleo do módulo, versão "standalone": abre sua própria transação.
+  /// Chamado pelo endpoint de ajuste manual (RF-017) e pelo
+  /// StockPurchaseListener (BR-006).
   async applyMovement(input: ApplyMovementInput) {
-    const ingredient = await this.prisma.ingredient.findFirst({
+    const result = await this.prisma.$transaction(async (tx: typeof this.prisma) =>
+      this.applyMovementInTransaction(tx, input),
+    );
+
+    await this.recordMovementAudit(input, result);
+
+    return result;
+  }
+
+  /// Versão "componível": recebe um client de transação já aberto por
+  /// outro serviço (ex.: SalesService.registerSale), permitindo que
+  /// múltiplas movimentações + outras escritas (como criar a Venda)
+  /// aconteçam atomicamente numa única transação — satisfaz a regra de
+  /// "efeito multi-módulo deve ser transacional" (claude/CLAUDE.md,
+  /// Seção 4) sem duplicar a lógica de cálculo de saldo/BR-010.
+  ///
+  /// Quem chama esta versão é responsável por registrar a auditoria
+  /// (o audit log em si não deve fazer parte da transação de negócio).
+  async applyMovementInTransaction(tx: typeof this.prisma, input: ApplyMovementInput) {
+    const ingredient = await tx.ingredient.findFirst({
       where: { id: input.ingredientId, organizationId: input.organizationId },
     });
     if (!ingredient) {
       throw new NotFoundException('Ingrediente não encontrado.');
     }
 
-    const businessUnit = await this.prisma.businessUnit.findFirst({
+    const businessUnit = await tx.businessUnit.findFirst({
       where: { id: input.businessUnitId, organizationId: input.organizationId },
     });
     if (!businessUnit) {
@@ -59,63 +81,69 @@ export class StockService {
     );
     const signedDelta = input.direction === 'IN' ? quantityStandardUnit : -quantityStandardUnit;
 
-    const result = await this.prisma.$transaction(async (tx: typeof this.prisma) => {
-      const existingBalance = await tx.stockBalance.findUnique({
-        where: {
-          businessUnitId_ingredientId: {
-            businessUnitId: input.businessUnitId,
-            ingredientId: input.ingredientId,
-          },
-        },
-      });
-
-      const currentQuantity = existingBalance ? Number(existingBalance.currentQuantity) : 0;
-      const newQuantity = round4(currentQuantity + signedDelta);
-
-      // BR-010: o sistema não deve permitir saldo negativo. A ressalva de
-      // PD-001 (venda sem estoque) é específica do módulo de Vendas
-      // (Etapa 16, ainda não implementado) e não se aplica aqui.
-      if (newQuantity < 0) {
-        throw new UnprocessableEntityException(
-          `Movimentação rejeitada (BR-010): saldo resultante seria negativo (${newQuantity} ${ingredient.standardUnit}). ` +
-            `Saldo atual: ${currentQuantity} ${ingredient.standardUnit}.`,
-        );
-      }
-
-      const movement = await tx.stockMovement.create({
-        data: {
+    const existingBalance = await tx.stockBalance.findUnique({
+      where: {
+        businessUnitId_ingredientId: {
           businessUnitId: input.businessUnitId,
           ingredientId: input.ingredientId,
-          direction: input.direction,
-          source: input.source,
-          adjustmentReason: input.adjustmentReason,
-          quantity: input.quantity,
-          unit: input.unit,
-          quantityStandardUnit,
-          purchaseId: input.purchaseId,
-          performedByUserId: input.performedByUserId,
-          notes: input.notes,
         },
-      });
-
-      const balance = await tx.stockBalance.upsert({
-        where: {
-          businessUnitId_ingredientId: {
-            businessUnitId: input.businessUnitId,
-            ingredientId: input.ingredientId,
-          },
-        },
-        update: { currentQuantity: newQuantity },
-        create: {
-          businessUnitId: input.businessUnitId,
-          ingredientId: input.ingredientId,
-          currentQuantity: newQuantity,
-        },
-      });
-
-      return { movement, balance };
+      },
     });
 
+    const currentQuantity = existingBalance ? Number(existingBalance.currentQuantity) : 0;
+    const newQuantity = round4(currentQuantity + signedDelta);
+    const wentNegative = newQuantity < 0;
+
+    // BR-010: por padrão, o sistema não permite saldo negativo. PD-001
+    // resolveu a exceção específica de Vendas (allowNegative=true,
+    // sinaliza em vez de bloquear) — compras e ajustes manuais continuam
+    // bloqueados.
+    if (wentNegative && !input.allowNegative) {
+      throw new UnprocessableEntityException(
+        `Movimentação rejeitada (BR-010): saldo resultante seria negativo (${newQuantity} ${ingredient.standardUnit}). ` +
+          `Saldo atual: ${currentQuantity} ${ingredient.standardUnit}.`,
+      );
+    }
+
+    const movement = await tx.stockMovement.create({
+      data: {
+        businessUnitId: input.businessUnitId,
+        ingredientId: input.ingredientId,
+        direction: input.direction,
+        source: input.source,
+        adjustmentReason: input.adjustmentReason,
+        quantity: input.quantity,
+        unit: input.unit,
+        quantityStandardUnit,
+        purchaseId: input.purchaseId,
+        saleId: input.saleId,
+        performedByUserId: input.performedByUserId,
+        notes: input.notes,
+      },
+    });
+
+    const balance = await tx.stockBalance.upsert({
+      where: {
+        businessUnitId_ingredientId: {
+          businessUnitId: input.businessUnitId,
+          ingredientId: input.ingredientId,
+        },
+      },
+      update: { currentQuantity: newQuantity },
+      create: {
+        businessUnitId: input.businessUnitId,
+        ingredientId: input.ingredientId,
+        currentQuantity: newQuantity,
+      },
+    });
+
+    return { movement, balance, wentNegative, ingredientName: ingredient.name };
+  }
+
+  private async recordMovementAudit(
+    input: ApplyMovementInput,
+    result: { movement: any; balance: any },
+  ) {
     await this.auditService.record({
       organizationId: input.organizationId,
       userId: input.performedByUserId,
@@ -129,8 +157,6 @@ export class StockService {
         resultingBalance: result.balance.currentQuantity,
       },
     });
-
-    return result;
   }
 
   /// RF-017: endpoint de ajuste manual — usuário informa motivo
