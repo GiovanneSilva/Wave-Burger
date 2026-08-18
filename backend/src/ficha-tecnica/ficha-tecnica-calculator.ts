@@ -1,4 +1,4 @@
-import { convertQuantity } from './unit-conversion';
+import { convertQuantity } from '../common/unit-conversion';
 
 export interface FichaTecnicaItemInput {
   quantity: number;

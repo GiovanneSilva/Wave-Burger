@@ -18,6 +18,8 @@ export const PERMISSIONS = {
   FICHA_TECNICA_MANAGE: 'ficha_tecnica:manage',
   SUPPLIERS_READ: 'suppliers:read',
   SUPPLIERS_MANAGE: 'suppliers:manage',
+  PURCHASES_READ: 'purchases:read',
+  PURCHASES_MANAGE: 'purchases:manage',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

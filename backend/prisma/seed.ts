@@ -16,6 +16,8 @@ const PERMISSIONS = [
   { key: 'ficha_tecnica:manage', description: 'Criar novas versões de ficha técnica' },
   { key: 'suppliers:read', description: 'Consultar fornecedores' },
   { key: 'suppliers:manage', description: 'Criar, editar, ativar e inativar fornecedores' },
+  { key: 'purchases:read', description: 'Consultar compras' },
+  { key: 'purchases:manage', description: 'Registrar, confirmar e cancelar compras' },
 ];
 
 /// Perfis iniciais do roteiro (Etapa 6). Mapeamento de permissões por perfil

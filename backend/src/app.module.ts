@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { HealthController } from './health/health.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -9,12 +10,14 @@ import { IngredientsModule } from './ingredients/ingredients.module';
 import { ProductsModule } from './products/products.module';
 import { FichaTecnicaModule } from './ficha-tecnica/ficha-tecnica.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { PurchasesModule } from './purchases/purchases.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
     AuditModule,
     AuthModule,
@@ -23,6 +26,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
     ProductsModule,
     FichaTecnicaModule,
     SuppliersModule,
+    PurchasesModule,
   ],
   controllers: [HealthController],
   providers: [],
