@@ -185,4 +185,41 @@ describe('StockService', () => {
       expect(result[0].currentQuantity).toBe('5.0000');
     });
   });
+
+  describe('getConsumptionSummary — RF-026 (Etapa 15)', () => {
+    it('agrupa e soma saídas por ingrediente no período', async () => {
+      prisma.businessUnit.findFirst.mockResolvedValue(businessUnit);
+      prisma.stockMovement.findMany.mockResolvedValue([
+        { ingredientId: 'ing-1', quantityStandardUnit: '2.0000', ingredient: { name: 'Carne' } },
+        { ingredientId: 'ing-1', quantityStandardUnit: '1.5000', ingredient: { name: 'Carne' } },
+        { ingredientId: 'ing-2', quantityStandardUnit: '0.5000', ingredient: { name: 'Queijo' } },
+      ]);
+
+      const result = await service.getConsumptionSummary(
+        'bu-1',
+        'org-1',
+        new Date('2026-08-01'),
+        new Date('2026-08-31'),
+      );
+
+      expect(result).toEqual([
+        { ingredientId: 'ing-1', ingredientName: 'Carne', totalConsumed: 3.5 },
+        { ingredientId: 'ing-2', ingredientName: 'Queijo', totalConsumed: 0.5 },
+      ]);
+    });
+
+    it('retorna lista vazia quando não há saídas no período', async () => {
+      prisma.businessUnit.findFirst.mockResolvedValue(businessUnit);
+      prisma.stockMovement.findMany.mockResolvedValue([]);
+
+      const result = await service.getConsumptionSummary(
+        'bu-1',
+        'org-1',
+        new Date('2026-08-01'),
+        new Date('2026-08-31'),
+      );
+
+      expect(result).toEqual([]);
+    });
+  });
 });

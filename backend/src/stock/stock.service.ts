@@ -203,6 +203,41 @@ export class StockService {
     });
   }
 
+  /// RF-026 ("consumo"): soma das saídas (OUT) por ingrediente num
+  /// período — hoje reflete apenas ajustes manuais (perda/desperdício/
+  /// correção/devolução), já que baixa por venda (RF-016/BR-009) depende
+  /// do módulo de Vendas (Etapa 16), ainda não implementado.
+  async getConsumptionSummary(
+    businessUnitId: string,
+    organizationId: string,
+    from: Date,
+    to: Date,
+  ) {
+    await this.ensureBusinessUnitBelongsToOrg(businessUnitId, organizationId);
+
+    const movements = await this.prisma.stockMovement.findMany({
+      where: { businessUnitId, direction: 'OUT', createdAt: { gte: from, lte: to } },
+      include: { ingredient: true },
+    });
+
+    const byIngredient = new Map<
+      string,
+      { ingredientId: string; ingredientName: string; totalConsumed: number }
+    >();
+    for (const movement of movements as any[]) {
+      const key = movement.ingredientId;
+      const entry = byIngredient.get(key) ?? {
+        ingredientId: movement.ingredientId,
+        ingredientName: movement.ingredient.name,
+        totalConsumed: 0,
+      };
+      entry.totalConsumed = round4(entry.totalConsumed + Number(movement.quantityStandardUnit));
+      byIngredient.set(key, entry);
+    }
+
+    return Array.from(byIngredient.values()).sort((a, b) => b.totalConsumed - a.totalConsumed);
+  }
+
   private async ensureBusinessUnitBelongsToOrg(businessUnitId: string, organizationId: string) {
     const businessUnit = await this.prisma.businessUnit.findFirst({
       where: { id: businessUnitId, organizationId },
