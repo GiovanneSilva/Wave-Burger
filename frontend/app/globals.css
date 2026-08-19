@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Wave Burger — Design System v1
+  Paleta extraída do logo da marca e aprovada em 19/08/2026.
+  Ver claude/CLAUDE.md, Seção "Frontend — Design System" para o
+  racional de cada token.
+*/
+@layer base {
+  :root {
+    --brand-primary: 203.6 88.2% 36.7%;       /* #0B6FB0 */
+    --brand-primary-hover: 203.7 88.2% 29.8%; /* #095A8F */
+    --sidebar-bg: 219.1 54.4% 15.5%;          /* #12213D */
+    --sidebar-text-muted: 221.9 22.5% 62.5%;  /* #8A97B5 */
+    --surface: 220 23.1% 97.5%;               /* #F7F8FA */
+    --card: 0 0% 100%;                        /* #FFFFFF */
+    --border: 220 13% 91%;                    /* #E5E7EB */
+    --success: 142.1 76.2% 36.3%;             /* #16A34A */
+    --warning: 32.1 94.6% 43.7%;              /* #D97706 */
+    --danger: 0 68.5% 49.8%;                  /* #D62828 — mesmo vermelho do logo */
+    --accent-warm: 27.8 91.5% 54.1%;          /* #F5821F — uso pontual, não dominante */
+    --foreground: 220.9 39.3% 11%;            /* #111827 */
+    --muted-foreground: 220 8.9% 46.1%;       /* #6B7280 */
+  }
+
+  .dark {
+    --surface: 222 24% 10%;
+    --card: 222 22% 13%;
+    --border: 222 16% 22%;
+    --foreground: 210 20% 96%;
+    --muted-foreground: 218 12% 65%;
+    --sidebar-bg: 222 30% 8%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}
