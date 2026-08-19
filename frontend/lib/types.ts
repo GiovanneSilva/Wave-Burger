@@ -98,6 +98,33 @@ export interface CurrentCostSummary {
   costDrifted: boolean;
 }
 
+export interface Ingredient {
+  id: string;
+  name: string;
+  standardUnit: string;
+  category: string | null;
+  averageCost: string | null;
+  isActive: boolean;
+}
+
+export interface SimulationItemResult {
+  ingredientId: string;
+  ingredientName: string;
+  quantity: string;
+  unit: string;
+  costPerStandardUnitUsed: number;
+  isSimulatedCost: boolean;
+  lineCost: number;
+}
+
+export interface SimulationResult {
+  productId: string;
+  salePriceUsed: number | null;
+  items: SimulationItemResult[];
+  simulatedTotals: CostTotals;
+  comparedToCurrentVersion: { totalCostDelta: number; estimatedProfitDelta: number | null } | null;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;

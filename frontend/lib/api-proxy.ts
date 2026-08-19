@@ -24,3 +24,34 @@ export async function proxyBackendGet(request: NextRequest, backendPath: string)
     return NextResponse.json({ message: 'Não foi possível conectar ao servidor.' }, { status: 502 });
   }
 }
+
+/// Mesma ideia, para escritas (POST/PATCH/DELETE). Repassa o corpo da
+/// requisição tal como veio do cliente — a validação de verdade acontece
+/// no NestJS (DTOs + class-validator), este proxy não duplica validação.
+export async function proxyBackendMutation(
+  request: NextRequest,
+  backendPath: string,
+  method: 'POST' | 'PATCH' | 'DELETE',
+) {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!token) {
+    return NextResponse.json({ message: 'Não autenticado.' }, { status: 401 });
+  }
+
+  const body = method === 'DELETE' ? undefined : await request.json().catch(() => undefined);
+
+  try {
+    const data = await apiFetch(backendPath, {
+      method,
+      token,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    return NextResponse.json(data);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return NextResponse.json({ message: err.message }, { status: err.statusCode });
+    }
+    return NextResponse.json({ message: 'Não foi possível conectar ao servidor.' }, { status: 502 });
+  }
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
@@ -11,6 +12,7 @@ import { EmptyState } from '@/components/wave/empty-state';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { formatPercentage } from '@/lib/format';
 import type { Product, FichaTecnicaVersion, CurrentCostSummary } from '@/lib/types';
 
@@ -139,9 +141,24 @@ export default function ProductDetailPage() {
 
         <TabsContent value="ficha">
           {fichaError || !ficha ? (
-            <EmptyState title="Sem ficha técnica" description="Cadastre a composição deste produto." />
+            <EmptyState
+              title="Sem ficha técnica"
+              description="Cadastre a composição deste produto."
+              action={
+                <Link href={`/products/${product.id}/ficha-tecnica/edit`}>
+                  <Button size="sm">Criar ficha técnica</Button>
+                </Link>
+              }
+            />
           ) : (
             <div className="flex flex-col gap-4">
+              <div className="flex justify-end">
+                <Link href={`/products/${product.id}/ficha-tecnica/edit`}>
+                  <Button variant="secondary" size="sm">
+                    Editar composição
+                  </Button>
+                </Link>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
