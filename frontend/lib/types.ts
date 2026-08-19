@@ -41,6 +41,63 @@ export interface ExecutiveDashboard {
   indicadoresNaoDisponiveis: string;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  internalCode: string | null;
+  category: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  salePrice: string | null;
+  status: 'DRAFT' | 'ACTIVE' | 'INACTIVE';
+  isAvailable: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FichaTecnicaItem {
+  id: string;
+  ingredientId: string;
+  quantity: string;
+  unit: string;
+  lossPercentage: string;
+  costSnapshot: string;
+  lineCost: string;
+  ingredient?: { id: string; name: string; standardUnit: string };
+}
+
+export interface FichaTecnicaVersion {
+  id: string;
+  productId: string;
+  version: number;
+  isCurrent: boolean;
+  ingredientsCost: string;
+  totalCost: string;
+  cmvPercentage: string | null;
+  markup: string | null;
+  marginPercentage: string | null;
+  estimatedProfit: string | null;
+  createdAt: string;
+  items: FichaTecnicaItem[];
+}
+
+export interface CostTotals {
+  ingredientsCost: number;
+  totalCost: number;
+  cmvPercentage: number | null;
+  markup: number | null;
+  marginPercentage: number | null;
+  estimatedProfit: number | null;
+}
+
+export interface CurrentCostSummary {
+  productId: string;
+  version: number;
+  frozenAtVersionCreation: CostTotals;
+  currentLive: CostTotals;
+  costDrifted: boolean;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
