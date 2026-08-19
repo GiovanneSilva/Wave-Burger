@@ -75,7 +75,7 @@ export class PurchasesService {
         organizationId: actor.organizationId,
         businessUnitId: dto.businessUnitId,
         supplierId: dto.supplierId,
-        purchaseDate: dto.purchaseDate,
+        purchaseDate: new Date(dto.purchaseDate),
         status: 'DRAFT',
         totalAmount,
         createdByUserId: actor.id,

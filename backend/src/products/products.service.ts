@@ -41,8 +41,12 @@ export class ProductsService {
         imageUrl: dto.imageUrl,
         salePrice: dto.salePrice,
         promotionalPrice: dto.promotionalPrice,
-        promotionalPeriodStart: dto.promotionalPeriodStart,
-        promotionalPeriodEnd: dto.promotionalPeriodEnd,
+        promotionalPeriodStart: dto.promotionalPeriodStart
+          ? new Date(dto.promotionalPeriodStart)
+          : undefined,
+        promotionalPeriodEnd: dto.promotionalPeriodEnd
+          ? new Date(dto.promotionalPeriodEnd)
+          : undefined,
         finalWeight: dto.finalWeight,
         averagePrepTimeMinutes: dto.averagePrepTimeMinutes,
         isAvailable: dto.isAvailable ?? true,
@@ -102,8 +106,12 @@ export class ProductsService {
         imageUrl: dto.imageUrl,
         salePrice: dto.salePrice,
         promotionalPrice: dto.promotionalPrice,
-        promotionalPeriodStart: dto.promotionalPeriodStart,
-        promotionalPeriodEnd: dto.promotionalPeriodEnd,
+        promotionalPeriodStart: dto.promotionalPeriodStart
+          ? new Date(dto.promotionalPeriodStart)
+          : undefined,
+        promotionalPeriodEnd: dto.promotionalPeriodEnd
+          ? new Date(dto.promotionalPeriodEnd)
+          : undefined,
         finalWeight: dto.finalWeight,
         averagePrepTimeMinutes: dto.averagePrepTimeMinutes,
         isAvailable: dto.isAvailable,

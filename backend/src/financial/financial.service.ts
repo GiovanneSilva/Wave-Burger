@@ -60,7 +60,7 @@ export class FinancialService {
         supplierId: dto.supplierId,
         grossAmount: dto.grossAmount,
         netAmount: dto.netAmount,
-        dueDate: dto.dueDate,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         createdByUserId: actor.id,
       },
     });
@@ -138,7 +138,10 @@ export class FinancialService {
       );
     }
 
-    const updated = await this.prisma.financialEntry.update({ where: { id }, data: dto });
+    const updated = await this.prisma.financialEntry.update({
+      where: { id },
+      data: { ...dto, dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined },
+    });
 
     await this.auditService.record({
       organizationId: actor.organizationId,
