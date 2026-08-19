@@ -1,10 +1,11 @@
 import Link from 'next/link';
+import { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { PercentageChange } from './percentage-change';
 
 interface KpiCardProps {
   label: string;
-  value: string;
+  value: ReactNode;
   change?: number;
   changeInvertColors?: boolean;
   changeLabel?: string;

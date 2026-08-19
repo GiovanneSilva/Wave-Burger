@@ -20,3 +20,34 @@ export interface LoginResponse {
     permissions: string[];
   };
 }
+
+export interface MostProfitableProduct {
+  productId: string;
+  productName: string;
+  estimatedProfit: number | null;
+  marginPercentage: number | null;
+}
+
+export interface ExecutiveDashboard {
+  periodo: { from: string; to: string };
+  faturamento: number;
+  cmv: number;
+  margemBruta: number | null;
+  lucroOperacional: number;
+  produtosMaisLucrativos: MostProfitableProduct[];
+  produtosMaisVendidos: null;
+  ticketMedio: null;
+  pontoDeEquilibrio: null;
+  indicadoresNaoDisponiveis: string;
+}
+
+export interface CriticalStockItem {
+  id: string;
+  currentQuantity: string;
+  ingredient: {
+    id: string;
+    name: string;
+    minimumStock: string;
+    standardUnit: string;
+  };
+}
