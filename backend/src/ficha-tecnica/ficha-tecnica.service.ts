@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateFichaTecnicaDto } from './dto/create-ficha-tecnica.dto';
@@ -103,7 +104,7 @@ export class FichaTecnicaService {
     });
     const nextVersion = (currentVersion?.version ?? 0) + 1;
 
-    const created = await this.prisma.$transaction(async (tx: typeof this.prisma) => {
+    const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       if (currentVersion) {
         await tx.fichaTecnica.update({
           where: { id: currentVersion.id },

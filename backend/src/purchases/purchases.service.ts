@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
@@ -129,7 +130,7 @@ export class PurchasesService {
 
     const confirmedAt = new Date();
 
-    const updated = await this.prisma.$transaction(async (tx: typeof this.prisma) => {
+    const updated = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const result = await tx.purchase.update({
         where: { id },
         data: { status: 'CONFIRMED', confirmedByUserId: actor.id, confirmedAt },

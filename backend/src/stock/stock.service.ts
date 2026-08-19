@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { convertQuantity } from '../common/unit-conversion';
@@ -41,7 +42,7 @@ export class StockService {
   /// Chamado pelo endpoint de ajuste manual (RF-017) e pelo
   /// StockPurchaseListener (BR-006).
   async applyMovement(input: ApplyMovementInput) {
-    const result = await this.prisma.$transaction(async (tx: typeof this.prisma) =>
+    const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) =>
       this.applyMovementInTransaction(tx, input),
     );
 
@@ -59,7 +60,7 @@ export class StockService {
   ///
   /// Quem chama esta versão é responsável por registrar a auditoria
   /// (o audit log em si não deve fazer parte da transação de negócio).
-  async applyMovementInTransaction(tx: typeof this.prisma, input: ApplyMovementInput) {
+  async applyMovementInTransaction(tx: Prisma.TransactionClient, input: ApplyMovementInput) {
     const ingredient = await tx.ingredient.findFirst({
       where: { id: input.ingredientId, organizationId: input.organizationId },
     });

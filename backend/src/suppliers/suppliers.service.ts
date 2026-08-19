@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateSupplierDto, UpdateSupplierDto } from './dto/supplier.dto';
@@ -136,7 +137,7 @@ export class SuppliersService {
 
     const isPreferred = dto.isPreferred ?? false;
 
-    const link = await this.prisma.$transaction(async (tx: typeof this.prisma) => {
+    const link = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       if (isPreferred) {
         await tx.supplierIngredient.updateMany({
           where: { ingredientId: dto.ingredientId, isPreferred: true },

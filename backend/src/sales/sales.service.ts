@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FichaTecnicaService } from '../ficha-tecnica/ficha-tecnica.service';
@@ -77,7 +78,7 @@ export class SalesService {
       resultingBalance: unknown;
     }> = [];
 
-    const sale = await this.prisma.$transaction(async (tx: typeof this.prisma) => {
+    const sale = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const created = await tx.sale.create({
         data: {
           organizationId: actor.organizationId,
