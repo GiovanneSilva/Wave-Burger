@@ -16,8 +16,10 @@ import {
   History,
   Settings,
   Flame,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/components/auth/auth-provider';
 
 interface NavItem {
   label: string;
@@ -74,6 +76,7 @@ interface SidebarProps {
 
 export function Sidebar({ onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
     <nav className="flex h-full w-56 flex-col bg-sidebar px-3 py-5" aria-label="Navegação principal">
@@ -116,6 +119,30 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </div>
         ))}
       </div>
+
+      {user && (
+        <div className="mt-4 flex items-center gap-2 border-t border-white/10 px-2 pt-4">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-medium text-white">
+            {user.name
+              .split(' ')
+              .slice(0, 2)
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-white">{user.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="shrink-0 rounded-md p-1.5 text-sidebar-muted hover:bg-white/5 hover:text-white"
+            aria-label="Sair"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
     </nav>
   );
 }
