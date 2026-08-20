@@ -129,6 +129,32 @@ export interface SimulationResult {
   comparedToCurrentVersion: { totalCostDelta: number; estimatedProfitDelta: number | null } | null;
 }
 
+export interface StockBalance {
+  id: string;
+  businessUnitId: string;
+  ingredientId: string;
+  currentQuantity: string;
+  updatedAt: string;
+  ingredient: {
+    id: string;
+    name: string;
+    standardUnit: string;
+    minimumStock: string | null;
+  };
+}
+
+export interface StockMovement {
+  id: string;
+  ingredientId: string;
+  direction: 'IN' | 'OUT';
+  source: 'PURCHASE' | 'MANUAL_ADJUSTMENT' | 'SALE';
+  adjustmentReason: 'LOSS' | 'WASTE' | 'INVENTORY' | 'CORRECTION' | 'RETURN' | null;
+  quantity: string;
+  unit: string;
+  notes: string | null;
+  createdAt: string;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
