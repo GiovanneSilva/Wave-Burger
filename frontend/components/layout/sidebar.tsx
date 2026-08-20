@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
-  ClipboardList,
   Wheat,
   Boxes,
   ShoppingCart,
@@ -46,7 +45,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Operação',
     items: [
       { label: 'Produtos', href: '/products', icon: Package },
-      { label: 'Fichas técnicas', href: '/ficha-tecnica', icon: ClipboardList },
       { label: 'Ingredientes', href: '/ingredients', icon: Wheat },
       { label: 'Estoque', href: '/stock', icon: Boxes },
       { label: 'Compras', href: '/purchases', icon: ShoppingCart },
