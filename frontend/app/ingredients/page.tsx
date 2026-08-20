@@ -1,78 +1,67 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Plus, X } from 'lucide-react';
+import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/wave/page-header';
+import { DataTable, type DataTableColumn } from '@/components/wave/data-table';
+import { StatusBadge } from '@/components/wave/status-badge';
+import { MoneyValue } from '@/components/wave/money-value';
+import { EmptyState } from '@/components/wave/empty-state';
+import { ConfirmDialog } from '@/components/wave/confirm-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import type { Ingredient } from '@/lib/types';
 
-interface Ingredient {
-  id: string;
-  name: string;
-  category: string | null;
-  standardUnit: string;
-  storageLocation: string | null;
-  minimumStock: string | null;
-  averageCost: string | null;
-  lastCost: string | null;
-  isActive: boolean;
-}
+const UNITS = ['kg', 'g', 'l', 'ml', 'un'];
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
-/**
- * Frontend mínimo do módulo de Ingredientes (Etapa 8).
- *
- * Não há tela de login ainda (fora do escopo até agora) — o token JWT é
- * colado manualmente aqui para autenticar as chamadas à API. Isso é
- * suficiente para validar o CRUD ponta a ponta; uma tela de login real
- * deve ser construída quando o roteiro chegar na etapa de UX (Etapa 19).
- */
 export default function IngredientsPage() {
-  const [token, setToken] = useState('');
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
+  const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState('');
-  const [standardUnit, setStandardUnit] = useState('kg');
   const [category, setCategory] = useState('');
+  const [standardUnit, setStandardUnit] = useState('kg');
   const [minimumStock, setMinimumStock] = useState('');
   const [averageCost, setAverageCost] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const authHeaders = () => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  });
+  const [toToggle, setToToggle] = useState<Ingredient | null>(null);
+  const [toggling, setToggling] = useState(false);
 
-  async function loadIngredients() {
-    if (!token) return;
-    setLoading(true);
+  async function load() {
     setError(null);
-    try {
-      const res = await fetch(`${API_URL}/ingredients`, { headers: authHeaders() });
-      if (!res.ok) {
-        throw new Error(`Erro ${res.status} ao carregar ingredientes.`);
-      }
-      const data = await res.json();
-      setIngredients(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido.');
-    } finally {
-      setLoading(false);
+    const res = await fetch('/api/ingredients');
+    if (!res.ok) {
+      setError('Não foi possível carregar os ingredientes.');
+      return;
     }
+    setIngredients(await res.json());
   }
 
   useEffect(() => {
-    if (token) {
-      loadIngredients();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+    load();
+  }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setFormError(null);
+
+    if (!name || !standardUnit) {
+      setFormError('Nome e unidade padrão são obrigatórios.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/ingredients`, {
+      const res = await fetch('/api/ingredients', {
         method: 'POST',
-        headers: authHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           standardUnit,
@@ -81,129 +70,164 @@ export default function IngredientsPage() {
           averageCost: averageCost || undefined,
         }),
       });
+
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message ?? `Erro ${res.status} ao criar ingrediente.`);
+        const body = await res.json().catch(() => ({ message: 'Não foi possível criar.' }));
+        setFormError(body.message);
+        return;
       }
+
       setName('');
       setCategory('');
       setMinimumStock('');
       setAverageCost('');
-      await loadIngredients();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido.');
+      setFormOpen(false);
+      await load();
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleToggleActive(ingredient: Ingredient) {
-    setError(null);
+  async function handleToggleConfirm() {
+    if (!toToggle) return;
+    setToggling(true);
     try {
-      const action = ingredient.isActive ? 'deactivate' : 'activate';
-      const res = await fetch(`${API_URL}/ingredients/${ingredient.id}/${action}`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-      });
-      if (!res.ok) {
-        throw new Error(`Erro ${res.status} ao atualizar status.`);
+      const action = toToggle.isActive ? 'deactivate' : 'activate';
+      const res = await fetch(`/api/ingredients/${toToggle.id}/${action}`, { method: 'PATCH' });
+      if (res.ok) {
+        setToToggle(null);
+        await load();
       }
-      await loadIngredients();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido.');
+    } finally {
+      setToggling(false);
     }
   }
+
+  const columns: DataTableColumn<Ingredient>[] = [
+    { key: 'name', header: 'Nome', render: (i) => <span className="font-medium">{i.name}</span> },
+    { key: 'category', header: 'Categoria', render: (i) => i.category ?? '—' },
+    { key: 'unit', header: 'Unidade', render: (i) => i.standardUnit },
+    {
+      key: 'minimumStock',
+      header: 'Estoque mínimo',
+      align: 'right',
+      render: (i) => (i.minimumStock ? `${i.minimumStock} ${i.standardUnit}` : '—'),
+    },
+    {
+      key: 'averageCost',
+      header: 'Custo médio',
+      align: 'right',
+      render: (i) => (i.averageCost ? <MoneyValue value={i.averageCost} /> : '—'),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (i) => <StatusBadge label={i.isActive ? 'Ativo' : 'Inativo'} tone={i.isActive ? 'success' : 'neutral'} />,
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (i) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            setToToggle(i);
+          }}
+        >
+          {i.isActive ? 'Inativar' : 'Ativar'}
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem', maxWidth: 800 }}>
-      <h1>Ingredientes</h1>
-      <p style={{ color: '#666' }}>
-        Frontend mínimo (Etapa 8). Cole abaixo um token JWT obtido via <code>POST /auth/login</code>.
-      </p>
+    <AppShell>
+      <PageHeader
+        title="Ingredientes"
+        description="Catálogo de matérias-primas — custo e unidade padrão usados na ficha técnica."
+        actions={
+          <Button onClick={() => setFormOpen((v) => !v)}>
+            {formOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {formOpen ? 'Cancelar' : 'Novo ingrediente'}
+          </Button>
+        }
+      />
 
-      <div style={{ marginBottom: '1.5rem' }}>
-        <label htmlFor="token">Token JWT: </label>
-        <input
-          id="token"
-          type="text"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="Bearer token"
-          style={{ width: '100%', padding: '0.5rem' }}
-        />
-      </div>
+      {formOpen && (
+        <Card className="mb-6">
+          <CardContent className="pt-5">
+            <form onSubmit={handleCreate} className="grid grid-cols-1 gap-4 md:grid-cols-5">
+              <div className="md:col-span-2">
+                <Label htmlFor="ing-name">Nome</Label>
+                <Input id="ing-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Carne Bovina" />
+              </div>
+              <div>
+                <Label htmlFor="ing-category">Categoria</Label>
+                <Input id="ing-category" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Opcional" />
+              </div>
+              <div>
+                <Label htmlFor="ing-unit">Unidade padrão</Label>
+                <Select id="ing-unit" value={standardUnit} onChange={(e) => setStandardUnit(e.target.value)}>
+                  {UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="ing-min">Estoque mínimo</Label>
+                <Input id="ing-min" value={minimumStock} onChange={(e) => setMinimumStock(e.target.value)} placeholder="Opcional" inputMode="decimal" />
+              </div>
+              <div>
+                <Label htmlFor="ing-cost">Custo médio (R$)</Label>
+                <Input id="ing-cost" value={averageCost} onChange={(e) => setAverageCost(e.target.value)} placeholder="Opcional" inputMode="decimal" />
+              </div>
 
-      {error && (
-        <p style={{ color: 'crimson', border: '1px solid crimson', padding: '0.5rem' }}>{error}</p>
+              <div className="flex items-end gap-2 md:col-span-5">
+                {formError && <p className="mr-auto text-sm text-danger">{formError}</p>}
+                <Button type="submit" disabled={saving}>
+                  {saving ? 'Salvando…' : 'Criar ingrediente'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      <form onSubmit={handleCreate} style={{ marginBottom: '2rem', display: 'grid', gap: '0.5rem' }}>
-        <h2>Novo ingrediente</h2>
-        <input
-          placeholder="Nome"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          style={{ padding: '0.5rem' }}
-        />
-        <select value={standardUnit} onChange={(e) => setStandardUnit(e.target.value)} style={{ padding: '0.5rem' }}>
-          <option value="kg">kg</option>
-          <option value="g">g</option>
-          <option value="l">l</option>
-          <option value="ml">ml</option>
-          <option value="un">un</option>
-        </select>
-        <input
-          placeholder="Categoria (opcional)"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          style={{ padding: '0.5rem' }}
-        />
-        <input
-          placeholder="Estoque mínimo (opcional)"
-          value={minimumStock}
-          onChange={(e) => setMinimumStock(e.target.value)}
-          style={{ padding: '0.5rem' }}
-        />
-        <input
-          placeholder="Custo médio (opcional)"
-          value={averageCost}
-          onChange={(e) => setAverageCost(e.target.value)}
-          style={{ padding: '0.5rem' }}
-        />
-        <button type="submit" style={{ padding: '0.5rem' }}>
-          Criar
-        </button>
-      </form>
+      {error && <EmptyState title="Não foi possível carregar" description={error} className="mb-4" />}
 
-      <h2>Lista</h2>
-      {loading && <p>Carregando...</p>}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Nome</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Unidade</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Custo médio</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Estoque mín.</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Status</th>
-            <th style={{ borderBottom: '1px solid #ccc' }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {ingredients.map((ingredient) => (
-            <tr key={ingredient.id}>
-              <td>{ingredient.name}</td>
-              <td>{ingredient.standardUnit}</td>
-              <td>{ingredient.averageCost ?? '—'}</td>
-              <td>{ingredient.minimumStock ?? '—'}</td>
-              <td>{ingredient.isActive ? 'Ativo' : 'Inativo'}</td>
-              <td>
-                <button onClick={() => handleToggleActive(ingredient)}>
-                  {ingredient.isActive ? 'Inativar' : 'Ativar'}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+      {ingredients === null && !error ? (
+        <p className="text-sm text-muted-foreground">Carregando ingredientes…</p>
+      ) : (
+        ingredients && (
+          <DataTable
+            columns={columns}
+            data={ingredients}
+            rowKey={(i) => i.id}
+            emptyTitle="Nenhum ingrediente ainda"
+            emptyDescription="Cadastre o primeiro ingrediente para começar a montar fichas técnicas."
+          />
+        )
+      )}
+
+      <ConfirmDialog
+        open={toToggle !== null}
+        onOpenChange={(open) => !open && setToToggle(null)}
+        title={toToggle?.isActive ? 'Inativar ingrediente?' : 'Ativar ingrediente?'}
+        description={
+          toToggle?.isActive
+            ? `${toToggle?.name} deixará de poder ser usado em novas fichas técnicas. O histórico é mantido.`
+            : `${toToggle?.name} volta a ficar disponível para novas fichas técnicas.`
+        }
+        confirmLabel={toToggle?.isActive ? 'Inativar' : 'Ativar'}
+        destructive={toToggle?.isActive}
+        onConfirm={handleToggleConfirm}
+        loading={toggling}
+      />
+    </AppShell>
   );
 }

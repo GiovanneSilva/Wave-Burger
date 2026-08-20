@@ -103,7 +103,11 @@ export interface Ingredient {
   name: string;
   standardUnit: string;
   category: string | null;
+  storageLocation: string | null;
+  minimumStock: string | null;
   averageCost: string | null;
+  lastCost: string | null;
+  lastPurchaseDate: string | null;
   isActive: boolean;
 }
 
