@@ -217,6 +217,42 @@ export interface Sale {
   stockWarnings?: Array<{ ingredientId: string; ingredientName: string; resultingBalance: string }>;
 }
 
+export interface FinancialEntry {
+  id: string;
+  businessUnitId: string;
+  type: 'PAYABLE' | 'RECEIVABLE';
+  category: string;
+  description: string;
+  supplierId: string | null;
+  purchaseId: string | null;
+  saleId: string | null;
+  grossAmount: string;
+  dueDate: string | null;
+  settledAt: string | null;
+  status: 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  createdAt: string;
+}
+
+export interface CashFlowResult {
+  from: string;
+  to: string;
+  entradas: number;
+  saidas: number;
+  saldo: number;
+}
+
+export interface DreResult {
+  from: string;
+  to: string;
+  receitaBruta: number;
+  taxas: number;
+  impostos: number;
+  cmv: number;
+  lucroBruto: number;
+  despesasOperacionais: number;
+  resultadoOperacional: number;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
