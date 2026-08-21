@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
-import { proxyBackendGet } from '@/lib/api-proxy';
+import { proxyBackendGet, proxyBackendMutation } from '@/lib/api-proxy';
 
 export async function GET(request: NextRequest) {
   return proxyBackendGet(request, '/products');
+}
+
+export async function POST(request: NextRequest) {
+  return proxyBackendMutation(request, '/products', 'POST');
 }

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/wave/page-header';
 import { DataTable, type DataTableColumn } from '@/components/wave/data-table';
 import { MoneyValue } from '@/components/wave/money-value';
 import { StatusBadge, PRODUCT_STATUS_MAP } from '@/components/wave/status-badge';
 import { EmptyState } from '@/components/wave/empty-state';
+import { Button } from '@/components/ui/button';
 import { formatPercentage } from '@/lib/format';
 import type { Product, FichaTecnicaVersion } from '@/lib/types';
 
@@ -100,6 +102,11 @@ export default function ProductsPage() {
       <PageHeader
         title="Produtos"
         description="Custo, preço e margem calculados a partir da ficha técnica corrente de cada produto."
+        actions={
+          <Button onClick={() => router.push('/products/new')}>
+            <Plus className="h-4 w-4" /> Novo produto
+          </Button>
+        }
       />
 
       {error && (
