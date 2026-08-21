@@ -253,6 +253,40 @@ export interface DreResult {
   resultadoOperacional: number;
 }
 
+export interface ConsumptionItem {
+  ingredientId: string;
+  ingredientName: string;
+  totalConsumed: number;
+}
+
+export interface StockAnalyticsDashboard {
+  periodo: { from: string; to: string };
+  consumoPeriodo: ConsumptionItem[];
+}
+
+export interface SupplierPriceHistoryItem {
+  supplierId: string;
+  supplierName: string;
+  purchaseDate: string;
+  unitPrice: string;
+  unit: string;
+}
+
+export interface SupplierAnalysis {
+  ingredientId: string;
+  ingredientName: string;
+  custoMedio: string | null;
+  ultimoCusto: string | null;
+  ultimaCompra: SupplierPriceHistoryItem | null;
+  historicoPrecos: SupplierPriceHistoryItem[];
+  variacaoPreco: { min: number; max: number; average: number } | null;
+  fornecedoresVinculados: Array<{
+    id: string;
+    isPreferred: boolean;
+    supplier: { id: string; name: string };
+  }>;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
