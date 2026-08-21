@@ -179,6 +179,27 @@ export interface SupplierIngredientLink {
   };
 }
 
+export interface PurchaseItem {
+  id: string;
+  ingredientId: string;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+  totalPrice: string;
+}
+
+export interface Purchase {
+  id: string;
+  supplierId: string;
+  businessUnitId: string;
+  purchaseDate: string;
+  status: 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+  totalAmount: string;
+  confirmedAt: string | null;
+  createdAt: string;
+  items: PurchaseItem[];
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
