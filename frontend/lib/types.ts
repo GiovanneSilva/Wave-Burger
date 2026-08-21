@@ -200,6 +200,23 @@ export interface Purchase {
   items: PurchaseItem[];
 }
 
+export interface Sale {
+  id: string;
+  businessUnitId: string;
+  productId: string;
+  quantity: string;
+  unitPriceSnapshot: string;
+  grossAmount: string;
+  discountType: 'PERCENTAGE' | 'FIXED' | null;
+  discountValue: string | null;
+  discountAmount: string;
+  netAmount: string;
+  saleDate: string;
+  hadInsufficientStock: boolean;
+  createdAt: string;
+  stockWarnings?: Array<{ ingredientId: string; ingredientName: string; resultingBalance: string }>;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
