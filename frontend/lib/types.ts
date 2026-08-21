@@ -155,6 +155,30 @@ export interface StockMovement {
   createdAt: string;
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  taxId: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  paymentTerms: string | null;
+  averageDeliveryDays: number | null;
+  isActive: boolean;
+}
+
+export interface SupplierIngredientLink {
+  id: string;
+  supplierId: string;
+  ingredientId: string;
+  isPreferred: boolean;
+  ingredient: {
+    id: string;
+    name: string;
+    standardUnit: string;
+  };
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
