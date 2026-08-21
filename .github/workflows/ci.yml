@@ -1,0 +1,133 @@
+name: CI
+
+# Fase 1 do plano de qualidade do Wave Burger: testes unitários do
+# backend + build/lint/tsc do frontend em todo push, com relatório de
+# teste real anexado (JUnit XML + cobertura HTML) e visível direto na
+# aba de Checks do GitHub via dorny/test-reporter.
+#
+# `quality-gate` é o único check que precisa ser marcado como
+# obrigatório na branch protection da `main` — ele só passa se os dois
+# jobs anteriores passarem, então não é preciso listar cada job
+# individualmente na configuração do GitHub.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  backend-unit:
+    name: Backend — testes unitários
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # prisma generate só lê o schema para gerar tipos — não conecta
+      # de verdade no banco. Testes unitários usam mocks do Prisma, não
+      # precisam de Postgres real (isso é a Fase 2 do plano).
+      DATABASE_URL: 'postgresql://ci:ci@localhost:5432/ci_placeholder?schema=public'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+
+      - name: Rodar testes unitários (com cobertura + relatório JUnit)
+        run: npm run test:ci
+
+      - name: Publicar relatório de testes nos Checks do GitHub
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Backend — resultado dos testes
+          path: backend/test-results/junit.xml
+          reporter: jest-junit
+          fail-on-error: true
+
+      - name: Resumo de cobertura
+        if: always()
+        run: python3 ../.github/scripts/coverage-summary.py coverage/coverage-summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Anexar artefato — relatório completo (JUnit + cobertura HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: |
+            backend/test-results/junit.xml
+            backend/coverage/
+          retention-days: 30
+
+  frontend-build:
+    name: Frontend — build, lint e tipos
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: 'http://localhost:3001'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Checar tipos (tsc)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build de produção
+        run: npm run build
+
+      - name: Resumo
+        if: always()
+        run: 'echo "## Frontend — build, lint e tipos: OK ✅" >> "$GITHUB_STEP_SUMMARY"'
+
+  quality-gate:
+    name: Quality Gate
+    needs: [backend-unit, frontend-build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar resultado dos jobs anteriores
+        run: |
+          if [ "${{ needs.backend-unit.result }}" != "success" ] || [ "${{ needs.frontend-build.result }}" != "success" ]; then
+            echo "::error::Um ou mais checks falharam — merge bloqueado."
+            exit 1
+          fi
+          echo "Todos os checks passaram." >> "$GITHUB_STEP_SUMMARY"
