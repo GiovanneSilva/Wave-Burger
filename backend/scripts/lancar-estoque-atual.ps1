@@ -55,10 +55,14 @@ $sucesso = 0
 $falhas = 0
 
 foreach ($item in $estoqueAtual) {
-    $ingrediente = $ingredientes | Where-Object { $_.name -eq $item.Nome } | Select-Object -First 1
+    $ingrediente = $ingredientes | Where-Object { $_.name.Trim().ToLower() -eq $item.Nome.Trim().ToLower() } | Select-Object -First 1
 
     if (-not $ingrediente) {
-        Write-Host "  [FALHA] Ingrediente '$($item.Nome)' não encontrado no catálogo — confira o nome exato em /ingredients." -ForegroundColor Red
+        Write-Host "  [FALHA] Ingrediente '$($item.Nome)' não encontrado no catálogo." -ForegroundColor Red
+        $parecidos = $ingredientes | Where-Object { $_.name.ToLower().Contains($item.Nome.Substring(0, [Math]::Min(4, $item.Nome.Length)).ToLower()) }
+        if ($parecidos) {
+            Write-Host "           Nomes parecidos cadastrados: $($parecidos.name -join ', ')" -ForegroundColor Yellow
+        }
         $falhas++
         continue
     }
