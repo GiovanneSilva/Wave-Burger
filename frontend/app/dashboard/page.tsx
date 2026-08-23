@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/wave/empty-state';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/components/auth/auth-provider';
 import { formatPercentage } from '@/lib/format';
-import type { ExecutiveDashboard, CriticalStockItem } from '@/lib/types';
+import type { ExecutiveDashboard, CriticalStockItem, DeliverableQuantity } from '@/lib/types';
 
 function last30Days() {
   const to = new Date();
@@ -24,6 +24,7 @@ export default function DashboardPage() {
 
   const [dashboard, setDashboard] = useState<ExecutiveDashboard | null>(null);
   const [criticalStock, setCriticalStock] = useState<CriticalStockItem[] | null>(null);
+  const [deliverable, setDeliverable] = useState<DeliverableQuantity[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,10 +47,14 @@ export default function DashboardPage() {
       fetch(`/api/stock/below-minimum?businessUnitId=${user.businessUnitId}`)
         .then((res) => (res.ok ? (res.json() as Promise<CriticalStockItem[]>) : null))
         .catch(() => null),
+      fetch(`/api/analytics/deliverable-quantities?businessUnitId=${user.businessUnitId}`)
+        .then((res) => (res.ok ? (res.json() as Promise<DeliverableQuantity[]>) : null))
+        .catch(() => null),
     ])
-      .then(([exec, stock]) => {
+      .then(([exec, stock, deliverableQuantities]) => {
         setDashboard(exec);
         setCriticalStock(stock);
+        setDeliverable(deliverableQuantities);
       })
       .catch(() => setError('Não foi possível carregar os indicadores. Verifique se a API está no ar.'))
       .finally(() => setLoading(false));
@@ -114,6 +119,35 @@ export default function DashboardPage() {
                 <span>
                   <span className="font-medium">{item.ingredient.name}</span> abaixo do estoque mínimo (
                   {item.currentQuantity} / {item.ingredient.minimumStock} {item.ingredient.standardUnit})
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {deliverable && deliverable.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Quanto dá pra entregar hoje</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 pt-0">
+            {deliverable.map((d) => (
+              <div key={d.productId} className="flex items-center justify-between text-sm">
+                <span className="text-foreground">{d.productName}</span>
+                <span className="flex items-center gap-2">
+                  {d.limitingIngredientName && (
+                    <span className="text-xs text-muted-foreground">
+                      limitado por {d.limitingIngredientName}
+                    </span>
+                  )}
+                  <span
+                    className={`font-medium tabular-nums ${
+                      d.deliverableQuantity === 0 ? 'text-danger' : d.deliverableQuantity < 5 ? 'text-warning' : 'text-foreground'
+                    }`}
+                  >
+                    {d.deliverableQuantity} un.
+                  </span>
                 </span>
               </div>
             ))}

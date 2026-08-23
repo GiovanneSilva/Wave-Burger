@@ -52,4 +52,13 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getSupplierAnalysis(ingredientId, user.organizationId);
   }
+
+  @Get('deliverable-quantities')
+  @RequirePermissions(PERMISSIONS.STOCK_READ)
+  getDeliverableQuantities(
+    @Query('businessUnitId') businessUnitId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.analyticsService.getDeliverableQuantities(businessUnitId, user.organizationId);
+  }
 }

@@ -287,6 +287,14 @@ export interface SupplierAnalysis {
   }>;
 }
 
+export interface DeliverableQuantity {
+  productId: string;
+  productName: string;
+  deliverableQuantity: number;
+  limitingIngredientId: string | null;
+  limitingIngredientName: string | null;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;

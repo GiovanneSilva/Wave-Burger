@@ -20,6 +20,7 @@ Este arquivo rastreia decisões de negócio ainda não fechadas. Nenhuma delas d
 |----|-----------|-------------------|
 | PD-009 | Não existe "capítulo de integração iFood" no Documento Mestre v0.1, apesar de citado no guia de implementação (Etapa 20). Precisa ser produzido/validado antes da Etapa 20. | Integração iFood |
 | PD-011 | Não há regra definida de conversão de unidades entre compra (ex.: kg, caixa), cadastro do ingrediente (unidade padrão) e ficha técnica (quantidade usada). | Ingredientes, Compras, Ficha Técnica |
+| PD-012 | Inconsistência descoberta em 23/08/2026 ao implementar "quantidade entregável" no Dashboard: o custo da ficha técnica (RF-004) infla a quantidade por `lossPercentage` (perda estimada), mas a baixa de estoque real na venda (RF-016/BR-009, Etapa 16) NÃO aplica esse mesmo ajuste — o sistema pode estar subestimando o consumo real de estoque a cada venda quando o produto tem perda estimada configurada. Precisa decisão: aplicar `lossPercentage` também na baixa de estoque, ou manter como está e documentar que `lossPercentage` afeta só o custo exibido, não o controle físico de estoque. | Vendas, Estoque, Ficha Técnica |
 
 ## Como usar este arquivo
 

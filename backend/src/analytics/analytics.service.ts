@@ -4,6 +4,8 @@ import { FichaTecnicaService } from '../ficha-tecnica/ficha-tecnica.service';
 import { StockService } from '../stock/stock.service';
 import { FinancialService } from '../financial/financial.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
+import { convertQuantity } from '../common/unit-conversion';
+import { calculateDeliverableQuantity } from './deliverable-quantity-calculator';
 
 @Injectable()
 export class AnalyticsService {
@@ -156,6 +158,75 @@ export class AnalyticsService {
       variacaoPreco: priceVariation,
       fornecedoresVinculados: linkedSuppliers,
     };
+  }
+
+  /// "Quanto dá pra entregar com o estoque de hoje" — para cada produto
+  /// ATIVO, olha a ficha técnica corrente e acha o ingrediente que vai
+  /// faltar primeiro (o "gargalo"), seguindo o padrão indicador → causa
+  /// do brief de design (não é só um número, já aponta o porquê).
+  ///
+  /// Deliberadamente consistente com o que `SalesService.registerSale`
+  /// REALMENTE desconta do estoque hoje (Etapa 16) — ou seja, SEM ajuste
+  /// de `lossPercentage`. Isso expõe uma inconsistência pré-existente:
+  /// o custo da ficha técnica INFLA a quantidade por `lossPercentage`
+  /// (RF-004), mas a baixa de estoque na venda não aplica esse ajuste.
+  /// Não foi corrigido aqui — está documentado no CLAUDE.md como
+  /// pendência, já que mudar o desconto de estoque é uma decisão de
+  /// negócio que não foi pedida nesta tarefa.
+  async getDeliverableQuantities(businessUnitId: string, organizationId: string) {
+    const products = await this.prisma.product.findMany({
+      where: { organizationId, status: 'ACTIVE' },
+      select: { id: true, name: true },
+    });
+
+    const results = await Promise.all(
+      products.map(async (product: { id: string; name: string }) => {
+        const ficha = await this.prisma.fichaTecnica.findFirst({
+          where: { productId: product.id, isCurrent: true },
+          include: { items: { include: { ingredient: true } } },
+        });
+
+        if (!ficha || (ficha as any).items.length === 0) {
+          return {
+            productId: product.id,
+            productName: product.name,
+            deliverableQuantity: 0,
+            limitingIngredientId: null,
+            limitingIngredientName: null,
+          };
+        }
+
+        const requirements = await Promise.all(
+          (ficha as any).items.map(async (item: any) => {
+            const consumptionPerUnitStandardUnit = convertQuantity(
+              Number(item.quantity),
+              item.unit,
+              item.ingredient.standardUnit,
+            );
+            const balance = await this.prisma.stockBalance.findUnique({
+              where: {
+                businessUnitId_ingredientId: { businessUnitId, ingredientId: item.ingredientId },
+              },
+            });
+
+            return {
+              ingredientId: item.ingredientId,
+              ingredientName: item.ingredient.name,
+              consumptionPerUnitStandardUnit,
+              currentStockStandardUnit: balance ? Number((balance as any).currentQuantity) : 0,
+            };
+          }),
+        );
+
+        return {
+          productId: product.id,
+          productName: product.name,
+          ...calculateDeliverableQuantity(requirements),
+        };
+      }),
+    );
+
+    return results.sort((a, b) => a.deliverableQuantity - b.deliverableQuantity);
   }
 }
 

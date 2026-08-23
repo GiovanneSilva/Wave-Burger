@@ -18,6 +18,8 @@ describe('AnalyticsService', () => {
       product: { findMany: jest.fn() },
       ingredient: { findFirst: jest.fn() },
       purchaseItem: { findMany: jest.fn() },
+      fichaTecnica: { findFirst: jest.fn() },
+      stockBalance: { findUnique: jest.fn() },
     };
     fichaTecnicaService = { getCurrentCostSummary: jest.fn() };
     stockService = {
@@ -222,6 +224,121 @@ describe('AnalyticsService', () => {
 
       expect(result.variacaoPreco).toBeNull();
       expect(result.ultimaCompra).toBeNull();
+    });
+  });
+
+  describe('getDeliverableQuantities', () => {
+    it('EXEMPLO COMPLETO: identifica o pão como gargalo (mesmo cenário do calculator)', async () => {
+      prisma.product.findMany.mockResolvedValue([{ id: 'prod-1', name: 'Smash Burger' }]);
+      prisma.fichaTecnica.findFirst.mockResolvedValue({
+        items: [
+          {
+            ingredientId: 'ing-carne',
+            quantity: '160',
+            unit: 'g',
+            ingredient: { standardUnit: 'kg', name: 'Carne Bovina' },
+          },
+          {
+            ingredientId: 'ing-pao',
+            quantity: '1',
+            unit: 'un',
+            ingredient: { standardUnit: 'un', name: 'Pão Brioche' },
+          },
+        ],
+      });
+      prisma.stockBalance.findUnique.mockImplementation(({ where }: any) => {
+        const id = where.businessUnitId_ingredientId.ingredientId;
+        if (id === 'ing-carne') return Promise.resolve({ currentQuantity: '3.24' });
+        if (id === 'ing-pao') return Promise.resolve({ currentQuantity: '5' });
+        return Promise.resolve(null);
+      });
+
+      const result = await service.getDeliverableQuantities('bu-1', 'org-1');
+
+      expect(result).toEqual([
+        {
+          productId: 'prod-1',
+          productName: 'Smash Burger',
+          deliverableQuantity: 5,
+          limitingIngredientId: 'ing-pao',
+          limitingIngredientName: 'Pão Brioche',
+        },
+      ]);
+    });
+
+    it('retorna 0 para produto ativo sem ficha técnica corrente', async () => {
+      prisma.product.findMany.mockResolvedValue([{ id: 'prod-2', name: 'Sem Ficha' }]);
+      prisma.fichaTecnica.findFirst.mockResolvedValue(null);
+
+      const result = await service.getDeliverableQuantities('bu-1', 'org-1');
+
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          productId: 'prod-2',
+          deliverableQuantity: 0,
+          limitingIngredientId: null,
+        }),
+      );
+    });
+
+    it('trata ingrediente nunca comprado (sem StockBalance) como estoque zero', async () => {
+      prisma.product.findMany.mockResolvedValue([{ id: 'prod-1', name: 'Smash Burger' }]);
+      prisma.fichaTecnica.findFirst.mockResolvedValue({
+        items: [
+          {
+            ingredientId: 'ing-novo',
+            quantity: '50',
+            unit: 'g',
+            ingredient: { standardUnit: 'kg', name: 'Ingrediente Novo' },
+          },
+        ],
+      });
+      prisma.stockBalance.findUnique.mockResolvedValue(null);
+
+      const result = await service.getDeliverableQuantities('bu-1', 'org-1');
+
+      expect(result[0].deliverableQuantity).toBe(0);
+    });
+
+    it('ordena os produtos do mais urgente (menor quantidade entregável) para o menos', async () => {
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'prod-farto', name: 'Fartura' },
+        { id: 'prod-critico', name: 'Crítico' },
+      ]);
+      prisma.fichaTecnica.findFirst.mockImplementation(({ where }: any) => {
+        if (where.productId === 'prod-farto') {
+          return Promise.resolve({
+            items: [
+              {
+                ingredientId: 'ing-a',
+                quantity: '1',
+                unit: 'un',
+                ingredient: { standardUnit: 'un', name: 'A' },
+              },
+            ],
+          });
+        }
+        return Promise.resolve({
+          items: [
+            {
+              ingredientId: 'ing-b',
+              quantity: '1',
+              unit: 'un',
+              ingredient: { standardUnit: 'un', name: 'B' },
+            },
+          ],
+        });
+      });
+      prisma.stockBalance.findUnique.mockImplementation(({ where }: any) => {
+        const id = where.businessUnitId_ingredientId.ingredientId;
+        if (id === 'ing-a') return Promise.resolve({ currentQuantity: '100' });
+        return Promise.resolve({ currentQuantity: '2' });
+      });
+
+      const result = await service.getDeliverableQuantities('bu-1', 'org-1');
+
+      expect(result[0].productId).toBe('prod-critico');
+      expect(result[1].productId).toBe('prod-farto');
     });
   });
 });
