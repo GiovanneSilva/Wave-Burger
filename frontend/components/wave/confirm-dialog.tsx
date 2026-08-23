@@ -21,6 +21,11 @@ interface ConfirmDialogProps {
   destructive?: boolean;
   onConfirm: () => void;
   loading?: boolean;
+  /// Erro retornado pela ação (ex.: regra de negócio recusada no
+  /// backend). Renderizado DENTRO do diálogo — colocar isso fora, atrás
+  /// do overlay, deixaria a mensagem invisível enquanto o modal está
+  /// aberto.
+  error?: string | null;
 }
 
 /// Confirmação antes de uma ação irreversível ou de impacto (inativar
@@ -37,6 +42,7 @@ export function ConfirmDialog({
   destructive = false,
   onConfirm,
   loading = false,
+  error,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,6 +51,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {error && <p className="text-sm text-danger">{error}</p>}
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="secondary">{cancelLabel}</Button>

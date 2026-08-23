@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/wave/page-header';
 import { StatusBadge, PRODUCT_STATUS_MAP } from '@/components/wave/status-badge';
 import { MoneyValue } from '@/components/wave/money-value';
 import { EmptyState } from '@/components/wave/empty-state';
+import { ConfirmDialog } from '@/components/wave/confirm-dialog';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -27,43 +28,59 @@ export default function ProductDetailPage() {
   const [history, setHistory] = useState<FichaTecnicaVersion[] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [toggleOpen, setToggleOpen] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+
+    const productRes = await fetch(`/api/products/${productId}`);
+    if (!productRes.ok) {
+      setLoading(false);
+      return;
+    }
+    const productData: Product = await productRes.json();
+    setProduct(productData);
+
+    const [fichaRes, costRes, historyRes] = await Promise.all([
+      fetch(`/api/products/${productId}/ficha-tecnica`),
+      fetch(`/api/products/${productId}/ficha-tecnica/current-cost`),
+      fetch(`/api/products/${productId}/ficha-tecnica/history`),
+    ]);
+
+    if (fichaRes.ok) setFicha(await fichaRes.json());
+    else setFichaError(true);
+
+    if (costRes.ok) setCostSummary(await costRes.json());
+    if (historyRes.ok) setHistory(await historyRes.json());
+
+    setLoading(false);
+  }
+
   useEffect(() => {
-    let cancelled = false;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]);
 
-    async function load() {
-      setLoading(true);
-
-      const productRes = await fetch(`/api/products/${productId}`);
-      if (!productRes.ok) {
-        if (!cancelled) setLoading(false);
+  async function handleToggleConfirm() {
+    if (!product) return;
+    setToggling(true);
+    setToggleError(null);
+    try {
+      const action = product.status === 'ACTIVE' ? 'deactivate' : 'activate';
+      const res = await fetch(`/api/products/${productId}/${action}`, { method: 'PATCH' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: 'Não foi possível alterar o status.' }));
+        setToggleError(body.message);
         return;
       }
-      const productData: Product = await productRes.json();
-      if (cancelled) return;
-      setProduct(productData);
-
-      const [fichaRes, costRes, historyRes] = await Promise.all([
-        fetch(`/api/products/${productId}/ficha-tecnica`),
-        fetch(`/api/products/${productId}/ficha-tecnica/current-cost`),
-        fetch(`/api/products/${productId}/ficha-tecnica/history`),
-      ]);
-
-      if (cancelled) return;
-
-      if (fichaRes.ok) setFicha(await fichaRes.json());
-      else setFichaError(true);
-
-      if (costRes.ok) setCostSummary(await costRes.json());
-      if (historyRes.ok) setHistory(await historyRes.json());
-
-      setLoading(false);
+      setToggleOpen(false);
+      await load();
+    } finally {
+      setToggling(false);
     }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [productId]);
+  }
 
   if (loading) {
     return (
@@ -84,13 +101,43 @@ export default function ProductDetailPage() {
   }
 
   const statusInfo = PRODUCT_STATUS_MAP[product.status];
+  const isActive = product.status === 'ACTIVE';
+  const isInactive = product.status === 'INACTIVE';
 
   return (
     <AppShell>
       <PageHeader
         title={product.name}
         description={product.internalCode ? `Código: ${product.internalCode}` : undefined}
-        actions={<StatusBadge label={statusInfo.label} tone={statusInfo.tone} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge label={statusInfo.label} tone={statusInfo.tone} />
+            {!isInactive && (
+              <Button
+                variant={isActive ? 'secondary' : 'default'}
+                size="sm"
+                onClick={() => {
+                  setToggleError(null);
+                  setToggleOpen(true);
+                }}
+              >
+                {isActive ? 'Inativar' : 'Ativar produto'}
+              </Button>
+            )}
+            {isInactive && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setToggleError(null);
+                  setToggleOpen(true);
+                }}
+              >
+                Reativar
+              </Button>
+            )}
+          </div>
+        }
       />
 
       <Tabs defaultValue="overview">
@@ -274,6 +321,25 @@ export default function ProductDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={toggleOpen}
+        onOpenChange={(open) => {
+          setToggleOpen(open);
+          if (!open) setToggleError(null);
+        }}
+        title={isActive ? 'Inativar produto?' : isInactive ? 'Reativar produto?' : 'Ativar produto?'}
+        description={
+          isActive
+            ? `${product.name} deixará de aparecer para venda. O histórico é mantido.`
+            : `${product.name} passará a aparecer na tela de Vendas. É necessário ter uma ficha técnica válida — se não tiver, a ativação será recusada.`
+        }
+        confirmLabel={isActive ? 'Inativar' : isInactive ? 'Reativar' : 'Ativar'}
+        destructive={isActive}
+        onConfirm={handleToggleConfirm}
+        loading={toggling}
+        error={toggleError}
+      />
     </AppShell>
   );
 }
