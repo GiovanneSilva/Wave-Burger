@@ -149,6 +149,63 @@ Seguindo a mesma regra que já aplicamos pro módulo de Vendas (PD-010): não vo
 
 ---
 
+## 11. Plano de implementação — funções novas
+
+**Princípio confirmado pelo usuário em 23/08/2026:** o iFood passa a ser a **fonte automática principal** de vendas, mas o lançamento manual (tela `/sales/new`, já construída na Etapa 16) **nunca é removido nem desabilitado** — continua sendo a segunda opção, sempre disponível, para venda de balcão, teste, ou qualquer cenário fora do iFood. Nenhuma tela existente perde funcionalidade; só ganha uma origem nova.
+
+### 11.1. Mudança de schema (pequena e aditiva — não quebra nada existente)
+
+```prisma
+enum SaleOrigin {
+  MANUAL   // como já funciona hoje, Etapa 16
+  IFOOD
+}
+
+model Sale {
+  // ...campos existentes, sem alteração...
+  origin           SaleOrigin @default(MANUAL)
+  externalOrderId  String?    // preenchido só quando origin = IFOOD
+}
+```
+
+**Decisão de modelagem para pedidos multi-item (o gap já sinalizado na Seção 7):** em vez de reescrever `Sale` para suportar múltiplos itens (mudança grande, arriscada, afeta todo o cálculo já testado desde a Etapa 16), a proposta é: **cada item de um pedido do iFood vira uma `Sale` separada**, todas compartilhando o mesmo `externalOrderId` — assim dá pra agrupar visualmente "essas 3 vendas vieram do mesmo pedido #12345 do iFood" sem tocar no núcleo de `SalesService.registerSale()` que já funciona e já tem PD-001/BR-009 resolvidos. **Essa é uma escolha consciente meu para minimizar risco — se preferir a opção mais "correta" architeturalmente (Sale com itens múltiplos, mudança maior), me avisa antes de eu começar a Fase 2.**
+
+Mesma lógica se aplica a `FinancialEntry` (`origin: MANUAL | IFOOD`) para rastrear lançamentos vindos do Settlement.
+
+### 11.2. Novo módulo backend: `IfoodModule`
+
+| Serviço | Função | Reaproveita |
+|---|---|---|
+| `IfoodAuthService` | Obtém/renova token OAuth, cacheia com expiração | — (novo) |
+| `IfoodCatalogSyncService` | `syncProduct(productId)` / `syncAll()` — envia `Product`+`FichaTecnica` ativa pro Catalog do iFood, código externo = `Product.id` | Reutiliza `ProductsService`/`FichaTecnicaService` só para leitura |
+| `IfoodOrderPollingService` | **O coração do "puxar automaticamente"**: a cada 30s (`@nestjs/schedule` `@Cron`), consulta `/events:polling`, busca detalhe do pedido, mapeia itens por código externo, e chama `SalesService.registerSale()` uma vez por item — com `origin: 'IFOOD'` e o `externalOrderId` compartilhado | **Reaproveita 100% da lógica de venda já existente** (BR-009, PD-001, evento `sale.registered` → lançamento financeiro) — nenhum cálculo duplicado |
+| `IfoodInventorySyncService` | Envia "quanto dá pra entregar hoje" pro campo de inventário do Catalog, deixando o iFood pausar item sozinho quando esgotar | Reaproveita `AnalyticsService.getDeliverableQuantities()` (já existe, Etapa recente) |
+| `IfoodFinancialSyncService` | Consulta Settlement API, cria/atualiza `FinancialEntry` com `origin: 'IFOOD'`, categorizando taxa/repasse | Reaproveita `FinancialService.create()` |
+
+### 11.3. Frontend — o que muda
+
+- **Nova tela "Configurações → Integração iFood"**: status da conexão, botão "Sincronizar catálogo agora", log das últimas sincronizações e erros
+- **Tela de Vendas (lista)**: badge discreto indicando a origem — "Manual" ou "iFood" — ao lado de cada linha (reaproveita o `StatusBadge` já construído no design system)
+- **Formulário de nova venda manual**: continua exatamente como está hoje, sem nenhuma mudança — é a "segunda opção" intacta
+- **Dashboard**: card opcional de "pedidos iFood com erro de sincronização" (ex.: pedido chegou com um item sem ficha técnica cadastrada) — importante pra não deixar erro silencioso
+
+### 11.4. Ordem sugerida de implementação
+
+| Fase | O quê | Risco |
+|---|---|---|
+| 0 | Cadastro no Portal Developer, ambiente de teste, decisão final de autenticação (Centralizado, conforme recomendado na Seção 2) | Nenhum código ainda |
+| 1 | Catalog Sync (Wave Burger → iFood) | Baixo — unidirecional, não toca em venda/estoque |
+| 2 | Order Polling → `Sale` automática (**o núcleo**) | Médio — decisão do multi-item (11.1) precisa estar fechada antes de começar |
+| 3 | Inventário (Estoque → iFood) | Baixo — só leitura do nosso lado, reaproveita cálculo existente |
+| 4 | Financeiro (Settlement → `FinancialEntry`) | Médio — precisa decidir se substitui ou complementa o lançamento já criado via `sale.registered` (Seção 9, item 4) |
+| 5 | Homologação e produção | — |
+
+### 11.5. O que ainda precisa da sua confirmação antes de eu começar a codar
+
+1. Modelagem de pedido multi-item: aceitar a proposta do item 11.1 (N `Sale`s por pedido) ou preferir mudar `Sale` para suportar itens múltiplos de verdade?
+2. Fase 4: quando o pedido do iFood já gera `FinancialEntry` via `sale.registered` (Fase 2), a sincronização de Settlement (Fase 4) **substitui** esse lançamento com o valor líquido real, ou **complementa** como um segundo lançamento (ex.: ajuste de taxa)?
+3. Confirma que quer começar pela Fase 0/1, ou prefere outra ordem?
+
 ## Fontes consultadas
 
 - https://developer.ifood.com.br/pt-BR (portal geral)
