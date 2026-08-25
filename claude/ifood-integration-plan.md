@@ -216,7 +216,7 @@ Mesma lógica se aplica a `FinancialEntry` (`origin: MANUAL | IFOOD`) para rastr
 **Progresso da Fase 0/1 (24/08/2026):**
 - Fase 0 (cadastro no Portal Developer): responsabilidade do usuário — não é algo que o agente consegue fazer (exige CNPJ real, login, aprovação)
 - Fase 1 (Catalog Sync): **implementada em código** — `IfoodAuthService`, `mapProductToIfoodCatalogItem`, `IfoodCatalogSyncService`, endpoint `POST /ifood/catalog/sync`. 16 testes unitários (mock de `fetch`, sem depender de credenciais reais). Migration aditiva aplicada (`Sale.origin`/`externalOrderId`, `FinancialEntry.origin`).
-- Ainda faltando pra fechar a Fase 1 por completo: testar de verdade contra a API real do iFood (precisa das credenciais da Fase 0), disparo automático de sincronização quando um produto é ativado/editado (hoje só manual via endpoint), e a tela de frontend "Configurações → Integração iFood".
+- Ainda faltando pra fechar a Fase 1 por completo: testar de verdade contra a API real do iFood (precisa das credenciais da Fase 0), disparo automático de sincronização quando um produto é ativado/editado (hoje só manual via endpoint/tela). **Tela de frontend "Configurações → Integração iFood" já implementada** (`/settings`, 24/08/2026) — campo de ID da loja + botão "Sincronizar catálogo agora" + resultado por produto.
 
 ## Fontes consultadas
 

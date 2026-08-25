@@ -295,6 +295,13 @@ export interface DeliverableQuantity {
   limitingIngredientName: string | null;
 }
 
+export interface CatalogSyncResult {
+  productId: string;
+  productName: string;
+  success: boolean;
+  error?: string;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;
