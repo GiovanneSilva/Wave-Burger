@@ -15,6 +15,7 @@ import { StockModule } from './stock/stock.module';
 import { FinancialModule } from './financial/financial.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SalesModule } from './sales/sales.module';
+import { IfoodModule } from './ifood/ifood.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { SalesModule } from './sales/sales.module';
     FinancialModule,
     AnalyticsModule,
     SalesModule,
+    IfoodModule,
   ],
   controllers: [HealthController],
   providers: [],

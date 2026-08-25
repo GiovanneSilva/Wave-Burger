@@ -586,6 +586,14 @@ model FinancialEntry {
   dueDate           DateTime?             @map("due_date")
   settledAt         DateTime?             @map("settled_at")
   status            FinancialEntryStatus  @default(PENDING)
+  /// Integração iFood (planejamento): distingue lançamento criado pelo
+  /// fluxo normal (venda/compra manual ou automática, Etapa 14/16) de um
+  /// lançamento de AJUSTE criado a partir do Settlement do iFood (taxa/
+  /// comissão da plataforma) — Opção B confirmada pelo usuário em
+  /// 23/08/2026: o Settlement COMPLEMENTA o lançamento da venda, nunca
+  /// o substitui, preservando a rastreabilidade de "quanto vendi" vs.
+  /// "quanto o iFood cobrou".
+  origin            SaleOrigin            @default(MANUAL)
   createdByUserId   String                @map("created_by_user_id") @db.Uuid
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
@@ -611,6 +619,11 @@ enum DiscountType {
   FIXED
 }
 
+enum SaleOrigin {
+  MANUAL
+  IFOOD
+}
+
 /// Venda (Etapa 16) — escopo confirmado explicitamente com o usuário
 /// antes da implementação (PD-010, agora resolvido): um único produto
 /// por venda (produto + quantidade + preço + data), com desconto simples
@@ -625,6 +638,15 @@ enum DiscountType {
 /// a venda NUNCA é bloqueada por falta de estoque; este campo registra
 /// que o consumo desta venda deixou algum saldo negativo (sinalização,
 /// não bloqueio). Ver stockMovements para o detalhe por ingrediente.
+///
+/// origin/externalOrderId (integração iFood, planejamento em
+/// claude/ifood-integration-plan.md): um pedido do iFood com múltiplos
+/// itens vira múltiplas `Sale`s (uma por item), todas compartilhando o
+/// mesmo `externalOrderId` — decisão deliberada para reaproveitar
+/// `SalesService.registerSale()` sem reescrever o modelo de Sale.
+/// `origin` nunca é exposto no DTO público (`POST /sales`) — só
+/// preenchido internamente por quem chama o serviço diretamente (ex.:
+/// o futuro listener de pedidos do iFood), nunca pelo usuário via HTTP.
 model Sale {
   id                   String        @id @default(uuid()) @db.Uuid
   organizationId       String        @map("organization_id") @db.Uuid
@@ -639,6 +661,8 @@ model Sale {
   netAmount            Decimal       @map("net_amount") @db.Decimal(14, 4)
   saleDate             DateTime      @map("sale_date")
   hadInsufficientStock Boolean       @default(false) @map("had_insufficient_stock")
+  origin               SaleOrigin    @default(MANUAL)
+  externalOrderId      String?       @map("external_order_id")
   soldByUserId         String        @map("sold_by_user_id") @db.Uuid
   createdAt            DateTime      @default(now()) @map("created_at")
 
@@ -653,5 +677,6 @@ model Sale {
   @@index([businessUnitId])
   @@index([productId])
   @@index([saleDate])
+  @@index([externalOrderId])
   @@map("sales")
 }

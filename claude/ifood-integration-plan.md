@@ -200,11 +200,23 @@ Mesma lógica se aplica a `FinancialEntry` (`origin: MANUAL | IFOOD`) para rastr
 | 4 | Financeiro (Settlement → `FinancialEntry`) | Médio — precisa decidir se substitui ou complementa o lançamento já criado via `sale.registered` (Seção 9, item 4) |
 | 5 | Homologação e produção | — |
 
-### 11.5. O que ainda precisa da sua confirmação antes de eu começar a codar
+### 11.5. Decisões que precisavam da sua confirmação antes de codar
 
 1. Modelagem de pedido multi-item: aceitar a proposta do item 11.1 (N `Sale`s por pedido) ou preferir mudar `Sale` para suportar itens múltiplos de verdade?
 2. Fase 4: quando o pedido do iFood já gera `FinancialEntry` via `sale.registered` (Fase 2), a sincronização de Settlement (Fase 4) **substitui** esse lançamento com o valor líquido real, ou **complementa** como um segundo lançamento (ex.: ajuste de taxa)?
 3. Confirma que quer começar pela Fase 0/1, ou prefere outra ordem?
+
+### 11.6. Status das decisões e progresso
+
+**Todas as 3 confirmadas pelo usuário em 24/08/2026:**
+1. ✅ Modelagem multi-item: aceita a proposta do item 11.1 (N `Sale`s por pedido, agrupadas por `externalOrderId`)
+2. ✅ Settlement: **Opção B — Complementar** (novo lançamento de taxa/comissão, nunca substitui o lançamento da venda)
+3. ✅ Começar pela Fase 0/1
+
+**Progresso da Fase 0/1 (24/08/2026):**
+- Fase 0 (cadastro no Portal Developer): responsabilidade do usuário — não é algo que o agente consegue fazer (exige CNPJ real, login, aprovação)
+- Fase 1 (Catalog Sync): **implementada em código** — `IfoodAuthService`, `mapProductToIfoodCatalogItem`, `IfoodCatalogSyncService`, endpoint `POST /ifood/catalog/sync`. 16 testes unitários (mock de `fetch`, sem depender de credenciais reais). Migration aditiva aplicada (`Sale.origin`/`externalOrderId`, `FinancialEntry.origin`).
+- Ainda faltando pra fechar a Fase 1 por completo: testar de verdade contra a API real do iFood (precisa das credenciais da Fase 0), disparo automático de sincronização quando um produto é ativado/editado (hoje só manual via endpoint), e a tela de frontend "Configurações → Integração iFood".
 
 ## Fontes consultadas
 
