@@ -62,7 +62,7 @@ export class IfoodCatalogSyncService {
         status: product.status as 'DRAFT' | 'ACTIVE' | 'INACTIVE',
       });
 
-      const token = await this.authService.getAccessToken(organizationId);
+      const token = await this.authService.getAccessToken();
 
       const res = await fetch(`${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/items`, {
         method: 'PUT',

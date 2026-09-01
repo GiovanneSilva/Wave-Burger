@@ -34,7 +34,6 @@ model Organization {
   purchases     Purchase[]
   financialEntries FinancialEntry[]
   sales         Sale[]
-  ifoodCredential IfoodCredential?
 
   @@map("organizations")
 }
@@ -680,31 +679,4 @@ model Sale {
   @@index([saleDate])
   @@index([externalOrderId])
   @@map("sales")
-}
-
-/// Integração iFood — credencial do fluxo de autorização Distribuído
-/// (ver claude/ifood-integration-plan.md). Diferente de
-/// IFOOD_CLIENT_ID/IFOOD_CLIENT_SECRET (estáticos, em variável de
-/// ambiente), o refreshToken só passa a existir depois que o usuário
-/// completa a autorização manual, uma única vez, no Portal do Parceiro
-/// do iFood — por isso precisa ser PERSISTIDO, não só cacheado em
-/// memória: se o processo do backend reiniciar sem isso salvo, seria
-/// preciso repetir a autorização manual toda vez.
-///
-/// Nota de segurança (dívida técnica assumida conscientemente, mesmo
-/// padrão do JWT_SECRET de dev): refreshToken/accessToken armazenados
-/// em texto plano nesta primeira versão. Cifrar em repouso é um
-/// endurecimento de produção a considerar depois, não um bloqueio para
-/// uso local/piloto.
-model IfoodCredential {
-  id                   String    @id @default(uuid()) @db.Uuid
-  organizationId       String    @unique @map("organization_id") @db.Uuid
-  refreshToken         String    @map("refresh_token")
-  accessToken          String?   @map("access_token")
-  accessTokenExpiresAt DateTime? @map("access_token_expires_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@map("ifood_credentials")
 }

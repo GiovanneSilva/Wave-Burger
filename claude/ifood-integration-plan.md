@@ -130,7 +130,7 @@ Cadeia de APIs pensada pra conciliação financeira ponta a ponta (venda → rep
 
 Seguindo a mesma regra que já aplicamos pro módulo de Vendas (PD-010): não vou implementar nada disso sem confirmar com você primeiro. Peço que decida:
 
-1. **Modelo de autenticação**: Centralizado (recomendo) ou Distribuído?
+1. **Modelo de autenticação**: Centralizado (recomendo) ou Distribuído? — **✅ Confirmado em 01/09/2026: Centralizado.** Usuário tem acesso aos dois modelos + lojas de teste; testou brevemente o fluxo Distribuído (chegou a ser implementado e depois revertido), mas decidiu por Centralizado — mais simples, sem passo manual de autorização, e com suporte a Webhook.
 2. **Entrega de eventos**: Webhook (precisa de endpoint público exposto, com HTTPS) ou Polling (mais simples de rodar, mas exige um processo rodando sempre)?
 3. **Modelo de venda**: vale a pena evoluir `Sale` pra suportar múltiplos itens por pedido (mudança de esquema real), ou criar N vendas por pedido do iFood como solução de curto prazo?
 4. **Fonte da verdade financeira**: quando vier pedido do iFood, o lançamento financeiro nasce do nosso evento `sale.registered` (como hoje) ou passa a vir direto da Settlement API do iFood (mais preciso, mas exige esperar o ciclo de repasse)?
