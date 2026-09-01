@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -96,7 +100,10 @@ describe('SalesService', () => {
       prisma.product.findFirst.mockResolvedValue({ ...activeProduct, status: 'DRAFT' });
 
       await expect(
-        service.registerSale({ businessUnitId: 'bu-1', productId: 'prod-1', quantity: '1' } as any, actor),
+        service.registerSale(
+          { businessUnitId: 'bu-1', productId: 'prod-1', quantity: '1' } as any,
+          actor,
+        ),
       ).rejects.toThrow(UnprocessableEntityException);
     });
 
@@ -104,7 +111,10 @@ describe('SalesService', () => {
       prisma.product.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.registerSale({ businessUnitId: 'bu-1', productId: 'prod-x', quantity: '1' } as any, actor),
+        service.registerSale(
+          { businessUnitId: 'bu-1', productId: 'prod-x', quantity: '1' } as any,
+          actor,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -116,7 +126,11 @@ describe('SalesService', () => {
         balance: { currentQuantity: 5 },
         ingredientName: 'Carne Bovina',
       });
-      const saleCreated = { id: 'sale-1', netAmount: { toString: () => '50.0000' }, saleDate: new Date() };
+      const saleCreated = {
+        id: 'sale-1',
+        netAmount: { toString: () => '50.0000' },
+        saleDate: new Date(),
+      };
       const tx = mockTransaction(saleCreated);
 
       await service.registerSale(
@@ -161,7 +175,9 @@ describe('SalesService', () => {
         expect.objectContaining({ data: { hadInsufficientStock: true } }),
       );
       expect(audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({ metadata: expect.objectContaining({ stockWarnings: expect.any(Array) }) }),
+        expect.objectContaining({
+          metadata: expect.objectContaining({ stockWarnings: expect.any(Array) }),
+        }),
       );
     });
   });
@@ -175,7 +191,11 @@ describe('SalesService', () => {
         balance: { currentQuantity: 5 },
         ingredientName: 'Carne Bovina',
       });
-      const saleCreated = { id: 'sale-1', netAmount: { toString: () => '26.01' }, saleDate: new Date() };
+      const saleCreated = {
+        id: 'sale-1',
+        netAmount: { toString: () => '26.01' },
+        saleDate: new Date(),
+      };
       const tx = mockTransaction(saleCreated);
 
       await service.registerSale(
@@ -205,7 +225,11 @@ describe('SalesService', () => {
         balance: { currentQuantity: 5 },
         ingredientName: 'Carne Bovina',
       });
-      const saleCreated = { id: 'sale-1', netAmount: { toString: () => '23.90' }, saleDate: new Date() };
+      const saleCreated = {
+        id: 'sale-1',
+        netAmount: { toString: () => '23.90' },
+        saleDate: new Date(),
+      };
       const tx = mockTransaction(saleCreated);
 
       await service.registerSale(
@@ -220,7 +244,9 @@ describe('SalesService', () => {
       );
 
       expect(tx.sale.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ discountAmount: 5, netAmount: 23.9 }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ discountAmount: 5, netAmount: 23.9 }),
+        }),
       );
     });
 

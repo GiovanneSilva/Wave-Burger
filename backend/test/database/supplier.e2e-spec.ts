@@ -39,7 +39,9 @@ describe('Migration Etapa 11 — Supplier (estrutural)', () => {
   });
 
   afterEach(async () => {
-    await client.query('TRUNCATE supplier_ingredients, suppliers, ingredients, organizations CASCADE;');
+    await client.query(
+      'TRUNCATE supplier_ingredients, suppliers, ingredients, organizations CASCADE;',
+    );
   });
 
   async function insertSupplier(name: string) {
@@ -146,7 +148,9 @@ describe('Migration Etapa 11 — Supplier (estrutural)', () => {
 
     await client.query(`UPDATE suppliers SET is_active = false WHERE id = $1`, [supplierId]);
 
-    const result = await client.query(`SELECT is_active FROM suppliers WHERE id = $1`, [supplierId]);
+    const result = await client.query(`SELECT is_active FROM suppliers WHERE id = $1`, [
+      supplierId,
+    ]);
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0].is_active).toBe(false);
   });

@@ -139,9 +139,9 @@ describe('Migration Etapa 12 — Purchase (estrutural)', () => {
       [randomUUID(), purchaseId, ingredientId, '5', 'kg', '30', '150'],
     );
 
-    await expect(client.query(`DELETE FROM ingredients WHERE id = $1`, [ingredientId])).rejects.toThrow(
-      /foreign key constraint/i,
-    );
+    await expect(
+      client.query(`DELETE FROM ingredients WHERE id = $1`, [ingredientId]),
+    ).rejects.toThrow(/foreign key constraint/i);
   });
 
   it('RESTRICT: impede apagar um fornecedor referenciado por uma compra', async () => {

@@ -302,6 +302,13 @@ export interface CatalogSyncResult {
   error?: string;
 }
 
+export interface IfoodUserCodeResult {
+  userCode: string;
+  verificationUrl: string;
+  verificationUrlComplete: string;
+  expiresInSeconds: number;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;

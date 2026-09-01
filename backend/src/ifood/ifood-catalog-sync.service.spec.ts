@@ -41,7 +41,7 @@ describe('IfoodCatalogSyncService', () => {
       const result = await service.syncProduct('prod-1', 'org-1', 'merchant-1');
 
       expect(result).toEqual({ productId: 'prod-1', productName: 'Smash Burger', success: true });
-      expect(authService.getAccessToken).toHaveBeenCalled();
+      expect(authService.getAccessToken).toHaveBeenCalledWith('org-1');
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/catalog/v2.0/merchants/merchant-1/items'),
         expect.objectContaining({

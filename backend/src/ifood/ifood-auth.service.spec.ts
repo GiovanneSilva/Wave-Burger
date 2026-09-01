@@ -1,10 +1,13 @@
 import { IfoodAuthService } from './ifood-auth.service';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 
-describe('IfoodAuthService', () => {
+describe('IfoodAuthService (fluxo Distribuído)', () => {
   let service: IfoodAuthService;
   let configService: { get: jest.Mock };
+  let prisma: any;
   const originalFetch = global.fetch;
+  const ORG_ID = 'org-1';
 
   beforeEach(() => {
     configService = {
@@ -16,7 +19,17 @@ describe('IfoodAuthService', () => {
         return values[key] ?? fallback;
       }),
     };
-    service = new IfoodAuthService(configService as unknown as ConfigService);
+    prisma = {
+      ifoodCredential: {
+        findUnique: jest.fn(),
+        upsert: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    service = new IfoodAuthService(
+      configService as unknown as ConfigService,
+      prisma as unknown as PrismaService,
+    );
     global.fetch = jest.fn();
   });
 
@@ -24,80 +37,194 @@ describe('IfoodAuthService', () => {
     global.fetch = originalFetch;
   });
 
-  it('obtém um novo token na primeira chamada', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ accessToken: 'token-abc', expiresIn: 3600 }),
+  describe('requestUserCode — Passo 1', () => {
+    it('solicita o código e guarda o verifier internamente', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          userCode: 'ABC-123',
+          authorizationCodeVerifier: 'verifier-xyz',
+          verificationUrl: 'https://ifood.com/authorize',
+          verificationUrlComplete: 'https://ifood.com/authorize?code=ABC-123',
+          expiresIn: 600,
+        }),
+      });
+
+      const result = await service.requestUserCode(ORG_ID);
+
+      expect(result).toEqual({
+        userCode: 'ABC-123',
+        verificationUrl: 'https://ifood.com/authorize',
+        verificationUrlComplete: 'https://ifood.com/authorize?code=ABC-123',
+        expiresInSeconds: 600,
+      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/authentication/v1.0/oauth/userCode'),
+        expect.objectContaining({ method: 'POST' }),
+      );
     });
 
-    const token = await service.getAccessToken();
+    it('REJEITA quando as credenciais não estão configuradas', async () => {
+      configService.get.mockImplementation((_key: string, fallback?: string) => fallback);
 
-    expect(token).toBe('token-abc');
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/authentication/v1.0/oauth/token'),
-      expect.objectContaining({ method: 'POST' }),
-    );
+      await expect(service.requestUserCode(ORG_ID)).rejects.toThrow(
+        'Credenciais do iFood não configuradas',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
-  it('reutiliza o token em cache em vez de pedir um novo (dentro da validade)', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ accessToken: 'token-abc', expiresIn: 3600 }),
+  describe('exchangeAuthorizationCode — Passo 2', () => {
+    async function requestCodeFirst() {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          userCode: 'ABC-123',
+          authorizationCodeVerifier: 'verifier-xyz',
+          verificationUrl: 'https://ifood.com/authorize',
+          verificationUrlComplete: 'https://ifood.com/authorize?code=ABC-123',
+          expiresIn: 600,
+        }),
+      });
+      await service.requestUserCode(ORG_ID);
+    }
+
+    it('troca o código pelo token e PERSISTE o refresh_token no banco', async () => {
+      await requestCodeFirst();
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accessToken: 'access-abc',
+          refreshToken: 'refresh-abc',
+          expiresIn: 21600,
+        }),
+      });
+
+      await service.exchangeAuthorizationCode(ORG_ID, 'LHQX-ZZZZ');
+
+      expect(prisma.ifoodCredential.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { organizationId: ORG_ID },
+          create: expect.objectContaining({
+            refreshToken: 'refresh-abc',
+            accessToken: 'access-abc',
+          }),
+        }),
+      );
+
+      // usa o verifier certo na troca
+      const tokenCall = (global.fetch as jest.Mock).mock.calls[1];
+      const sentBody = tokenCall[1].body as URLSearchParams;
+      expect(sentBody.get('authorizationCodeVerifier')).toBe('verifier-xyz');
+      expect(sentBody.get('grantType')).toBe('authorization_code');
     });
 
-    await service.getAccessToken();
-    await service.getAccessToken();
-    await service.getAccessToken();
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    it('REJEITA se não houver solicitação de código pendente (Passo 1 nunca chamado)', async () => {
+      await expect(service.exchangeAuthorizationCode(ORG_ID, 'algum-codigo')).rejects.toThrow(
+        'Nenhuma solicitação de código pendente',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
-  it('pede um novo token quando o cache expirou', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ accessToken: 'token-curto', expiresIn: 1 }), // expira em 1s
+  describe('getAccessToken — uso do dia a dia', () => {
+    it('REJEITA quando a organização nunca completou a autorização (Fase 0 pendente)', async () => {
+      prisma.ifoodCredential.findUnique.mockResolvedValue(null);
+
+      await expect(service.getAccessToken(ORG_ID)).rejects.toThrow(
+        'Nenhuma autorização do iFood encontrada',
+      );
     });
 
-    await service.getAccessToken();
+    it('reutiliza o accessToken salvo no banco quando ainda válido', async () => {
+      prisma.ifoodCredential.findUnique.mockResolvedValue({
+        refreshToken: 'refresh-abc',
+        accessToken: 'access-cached',
+        accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      });
 
-    // avança o relógio manualmente além da expiração + margem de segurança
-    jest.useFakeTimers().setSystemTime(Date.now() + 60_000);
-    await service.getAccessToken();
-    jest.useRealTimers();
+      const token = await service.getAccessToken(ORG_ID);
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it('REJEITA quando as credenciais não estão configuradas', async () => {
-    configService.get.mockImplementation((_key: string, fallback?: string) => fallback);
-
-    await expect(service.getAccessToken()).rejects.toThrow('Credenciais do iFood não configuradas');
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('REJEITA quando o iFood responde com erro', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
-      status: 401,
-      text: async () => 'invalid_client',
+      expect(token).toBe('access-cached');
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    await expect(service.getAccessToken()).rejects.toThrow(
-      'Falha ao autenticar com o iFood (status 401)',
-    );
-  });
+    it('renova via refresh_token quando o accessToken salvo expirou', async () => {
+      prisma.ifoodCredential.findUnique.mockResolvedValue({
+        refreshToken: 'refresh-abc',
+        accessToken: 'access-velho',
+        accessTokenExpiresAt: new Date(Date.now() - 1000), // já expirado
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accessToken: 'access-novo', expiresIn: 21600 }),
+      });
 
-  it('clearCache() força obtenção de um novo token na próxima chamada', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ accessToken: 'token-abc', expiresIn: 3600 }),
+      const token = await service.getAccessToken(ORG_ID);
+
+      expect(token).toBe('access-novo');
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/authentication/v1.0/oauth/token'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+      const sentBody = (global.fetch as jest.Mock).mock.calls[0][1].body as URLSearchParams;
+      expect(sentBody.get('grantType')).toBe('refresh_token');
+      expect(sentBody.get('refreshToken')).toBe('refresh-abc');
+      expect(prisma.ifoodCredential.update).toHaveBeenCalled();
     });
 
-    await service.getAccessToken();
-    service.clearCache();
-    await service.getAccessToken();
+    it('mantém o refresh_token antigo se o iFood não devolver um novo na renovação', async () => {
+      prisma.ifoodCredential.findUnique.mockResolvedValue({
+        refreshToken: 'refresh-antigo',
+        accessToken: null,
+        accessTokenExpiresAt: null,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accessToken: 'access-novo', expiresIn: 21600 }), // sem refreshToken novo
+      });
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+      await service.getAccessToken(ORG_ID);
+
+      expect(prisma.ifoodCredential.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ refreshToken: 'refresh-antigo' }),
+        }),
+      );
+    });
+
+    it('REJEITA quando a renovação falha', async () => {
+      prisma.ifoodCredential.findUnique.mockResolvedValue({
+        refreshToken: 'refresh-abc',
+        accessToken: null,
+        accessTokenExpiresAt: null,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => 'invalid_grant',
+      });
+
+      await expect(service.getAccessToken(ORG_ID)).rejects.toThrow(
+        'Falha ao renovar o token do iFood',
+      );
+    });
+  });
+
+  describe('clearCache', () => {
+    it('força nova busca no banco na próxima chamada', async () => {
+      prisma.ifoodCredential.findUnique.mockResolvedValue({
+        refreshToken: 'refresh-abc',
+        accessToken: 'access-cached',
+        accessTokenExpiresAt: new Date(Date.now() + 3600_000),
+      });
+
+      await service.getAccessToken(ORG_ID);
+      service.clearCache();
+      await service.getAccessToken(ORG_ID);
+
+      expect(prisma.ifoodCredential.findUnique).toHaveBeenCalledTimes(2);
+    });
   });
 });

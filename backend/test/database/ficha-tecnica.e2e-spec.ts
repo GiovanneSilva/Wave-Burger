@@ -134,9 +134,9 @@ describe('Migration Etapa 10 — FichaTecnica (estrutural)', () => {
       [randomUUID(), ft.rows[0].id, ingredientId, '0.16', 'kg', '30.00', '4.80'],
     );
 
-    await expect(client.query(`DELETE FROM ingredients WHERE id = $1`, [ingredientId])).rejects.toThrow(
-      /foreign key constraint/i,
-    );
+    await expect(
+      client.query(`DELETE FROM ingredients WHERE id = $1`, [ingredientId]),
+    ).rejects.toThrow(/foreign key constraint/i);
   });
 
   it('RESTRICT: impede apagar um produto que possui ficha técnica', async () => {

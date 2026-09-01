@@ -107,9 +107,10 @@ describe('Migration Etapa 14 — FinancialEntry (estrutural)', () => {
     );
 
     await expect(
-      client.query(`UPDATE financial_entries SET status = 'PAID', settled_at = now() WHERE id = $1`, [
-        id,
-      ]),
+      client.query(
+        `UPDATE financial_entries SET status = 'PAID', settled_at = now() WHERE id = $1`,
+        [id],
+      ),
     ).resolves.toBeDefined();
 
     const result = await client.query(`SELECT status FROM financial_entries WHERE id = $1`, [id]);
