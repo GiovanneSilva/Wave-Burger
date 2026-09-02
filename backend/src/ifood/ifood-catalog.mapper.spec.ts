@@ -1,77 +1,93 @@
-import { mapProductToIfoodCatalogItem } from './ifood-catalog.mapper';
+import { buildIfoodItemPayload } from './ifood-catalog.mapper';
 
-describe('mapProductToIfoodCatalogItem', () => {
-  it('mapeia produto ativo com preço corretamente', () => {
-    const result = mapProductToIfoodCatalogItem({
-      id: 'prod-1',
-      name: 'Smash Burger',
-      description: 'Delicioso',
-      salePrice: 28.9,
-      status: 'ACTIVE',
-    });
+describe('buildIfoodItemPayload', () => {
+  /**
+   * EXEMPLO COMPLETO: reproduz o payload real esperado por
+   * PUT /catalog/v2.0/merchants/{merchantId}/items, confirmado pela
+   * documentação depois do erro 400 "FullItemDto is not valid".
+   */
+  it('EXEMPLO COMPLETO: monta o payload aninhado corretamente', () => {
+    const result = buildIfoodItemPayload(
+      {
+        id: 'prod-1',
+        name: 'Smash Burger',
+        description: 'Delicioso',
+        salePrice: 28.9,
+        status: 'ACTIVE',
+      },
+      'cat-lanches-001',
+    );
 
     expect(result).toEqual({
-      externalCode: 'prod-1',
-      name: 'Smash Burger',
-      description: 'Delicioso',
-      price: { value: 28.9 },
-      status: 'AVAILABLE',
+      item: {
+        id: 'prod-1',
+        type: 'DEFAULT',
+        categoryId: 'cat-lanches-001',
+        status: 'AVAILABLE',
+        price: { value: 28.9 },
+        externalCode: 'prod-1',
+        productId: 'prod-1',
+      },
+      products: [
+        { id: 'prod-1', name: 'Smash Burger', description: 'Delicioso', externalCode: 'prod-1' },
+      ],
+      optionGroups: [],
+      options: [],
     });
   });
 
   it('produto DRAFT ou INACTIVE vira status UNAVAILABLE', () => {
-    const draft = mapProductToIfoodCatalogItem({
-      id: 'prod-1',
-      name: 'X',
-      description: null,
-      salePrice: 10,
-      status: 'DRAFT',
-    });
-    const inactive = mapProductToIfoodCatalogItem({
-      id: 'prod-2',
-      name: 'Y',
-      description: null,
-      salePrice: 10,
-      status: 'INACTIVE',
-    });
+    const draft = buildIfoodItemPayload(
+      { id: 'p1', name: 'X', description: null, salePrice: 10, status: 'DRAFT' },
+      'cat-1',
+    );
+    const inactive = buildIfoodItemPayload(
+      { id: 'p2', name: 'Y', description: null, salePrice: 10, status: 'INACTIVE' },
+      'cat-1',
+    );
 
-    expect(draft.status).toBe('UNAVAILABLE');
-    expect(inactive.status).toBe('UNAVAILABLE');
+    expect(draft.item.status).toBe('UNAVAILABLE');
+    expect(inactive.item.status).toBe('UNAVAILABLE');
   });
 
-  it('externalCode é sempre o Product.id — é a correspondência usada na Fase 2', () => {
-    const result = mapProductToIfoodCatalogItem({
-      id: 'uuid-especifico-do-produto',
-      name: 'X',
-      description: null,
-      salePrice: 10,
-      status: 'ACTIVE',
-    });
+  it('Product.id é reaproveitado em item.id, products[0].id e externalCode — mesma correspondência 1:1', () => {
+    const result = buildIfoodItemPayload(
+      { id: 'uuid-especifico', name: 'X', description: null, salePrice: 10, status: 'ACTIVE' },
+      'cat-1',
+    );
 
-    expect(result.externalCode).toBe('uuid-especifico-do-produto');
+    expect(result.item.id).toBe('uuid-especifico');
+    expect(result.item.externalCode).toBe('uuid-especifico');
+    expect(result.item.productId).toBe('uuid-especifico');
+    expect(result.products[0].id).toBe('uuid-especifico');
+    expect(result.products[0].externalCode).toBe('uuid-especifico');
   });
 
-  it('description ausente vira undefined, não null (contrato de payload mais limpo)', () => {
-    const result = mapProductToIfoodCatalogItem({
-      id: 'prod-1',
-      name: 'X',
-      description: null,
-      salePrice: 10,
-      status: 'ACTIVE',
-    });
+  it('description ausente vira undefined, não null', () => {
+    const result = buildIfoodItemPayload(
+      { id: 'p1', name: 'X', description: null, salePrice: 10, status: 'ACTIVE' },
+      'cat-1',
+    );
 
-    expect(result.description).toBeUndefined();
+    expect(result.products[0].description).toBeUndefined();
   });
 
   it('REJEITA produto sem preço de venda definido', () => {
     expect(() =>
-      mapProductToIfoodCatalogItem({
-        id: 'prod-1',
-        name: 'Sem preço',
-        description: null,
-        salePrice: null,
-        status: 'ACTIVE',
-      }),
+      buildIfoodItemPayload(
+        { id: 'p1', name: 'Sem preço', description: null, salePrice: null, status: 'ACTIVE' },
+        'cat-1',
+      ),
     ).toThrow('não tem preço de venda definido');
+  });
+
+  it('optionGroups e options ficam vazios — Wave Burger ainda não modela complementos', () => {
+    const result = buildIfoodItemPayload(
+      { id: 'p1', name: 'X', description: null, salePrice: 10, status: 'ACTIVE' },
+      'cat-1',
+    );
+
+    expect(result.optionGroups).toEqual([]);
+    expect(result.options).toEqual([]);
   });
 });

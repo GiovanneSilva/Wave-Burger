@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { IfoodAuthService } from './ifood-auth.service';
-import { mapProductToIfoodCatalogItem } from './ifood-catalog.mapper';
+import { buildIfoodItemPayload } from './ifood-catalog.mapper';
 
 export interface CatalogSyncResult {
   productId: string;
@@ -10,6 +10,8 @@ export interface CatalogSyncResult {
   success: boolean;
   error?: string;
 }
+
+const DEFAULT_CATEGORY_NAME = 'Cardápio';
 
 /// Integração iFood (Fase 1). Envia nosso catálogo de produtos pro
 /// Catalog do iFood — unidirecional (Wave Burger → iFood), o passo de
@@ -29,6 +31,52 @@ export class IfoodCatalogSyncService {
       'IFOOD_API_BASE_URL',
       'https://merchant-api.ifood.com.br',
     );
+  }
+
+  /// O Catalog do iFood exige que todo item pertença a uma categoria
+  /// já cadastrada no cardápio da loja — diferente do Wave Burger,
+  /// onde `Product.category` é só um texto livre opcional. Busca pelo
+  /// nome; cria a categoria se ainda não existir.
+  private async resolveCategoryId(
+    merchantId: string,
+    categoryName: string,
+    token: string,
+  ): Promise<string> {
+    const listRes = await fetch(`${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/categories`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!listRes.ok) {
+      const text = await listRes.text().catch(() => '');
+      throw new Error(`Falha ao listar categorias do iFood (status ${listRes.status}): ${text}`);
+    }
+
+    const categories: Array<{ id: string; name: string }> = await listRes.json();
+    const existing = categories.find(
+      (c) => c.name.trim().toLowerCase() === categoryName.trim().toLowerCase(),
+    );
+    if (existing) {
+      return existing.id;
+    }
+
+    const createRes = await fetch(
+      `${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/categories`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: categoryName, status: 'AVAILABLE', template: 'DEFAULT' }),
+      },
+    );
+
+    if (!createRes.ok) {
+      const text = await createRes.text().catch(() => '');
+      throw new Error(
+        `Falha ao criar categoria "${categoryName}" no iFood (status ${createRes.status}): ${text}`,
+      );
+    }
+
+    const created = await createRes.json();
+    return created.id;
   }
 
   /// Sincroniza um único produto — chamado manualmente (tela de
@@ -54,15 +102,20 @@ export class IfoodCatalogSyncService {
     }
 
     try {
-      const payload = mapProductToIfoodCatalogItem({
-        id: product.id,
-        name: product.name,
-        description: (product as any).description ?? null,
-        salePrice: product.salePrice !== null ? Number(product.salePrice) : null,
-        status: product.status as 'DRAFT' | 'ACTIVE' | 'INACTIVE',
-      });
-
       const token = await this.authService.getAccessToken();
+      const categoryName = (product as any).category?.trim() || DEFAULT_CATEGORY_NAME;
+      const categoryId = await this.resolveCategoryId(merchantId, categoryName, token);
+
+      const payload = buildIfoodItemPayload(
+        {
+          id: product.id,
+          name: product.name,
+          description: (product as any).description ?? null,
+          salePrice: product.salePrice !== null ? Number(product.salePrice) : null,
+          status: product.status as 'DRAFT' | 'ACTIVE' | 'INACTIVE',
+        },
+        categoryId,
+      );
 
       const res = await fetch(`${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/items`, {
         method: 'PUT',
