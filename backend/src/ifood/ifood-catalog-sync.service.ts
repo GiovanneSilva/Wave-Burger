@@ -33,18 +33,50 @@ export class IfoodCatalogSyncService {
     );
   }
 
+  /// Toda loja no iFood tem ao menos um "catálogo" (geralmente o de
+  /// contexto DEFAULT/Entrega) — categorias e itens vivem dentro dele,
+  /// não diretamente no merchant. Prefere o catálogo de contexto
+  /// DEFAULT; se não encontrar, usa o primeiro da lista.
+  private async resolveCatalogId(merchantId: string, token: string): Promise<string> {
+    const res = await fetch(`${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/catalogs`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Falha ao listar catálogos do iFood (status ${res.status}): ${text}`);
+    }
+
+    const catalogs: Array<{ catalogId: string; context: string[] }> = await res.json();
+    if (catalogs.length === 0) {
+      throw new Error('A loja não tem nenhum catálogo cadastrado no iFood.');
+    }
+
+    const defaultCatalog = catalogs.find((c) => c.context?.includes('DEFAULT'));
+    return (defaultCatalog ?? catalogs[0]).catalogId;
+  }
+
   /// O Catalog do iFood exige que todo item pertença a uma categoria
   /// já cadastrada no cardápio da loja — diferente do Wave Burger,
   /// onde `Product.category` é só um texto livre opcional. Busca pelo
-  /// nome; cria a categoria se ainda não existir.
+  /// nome dentro do catálogo resolvido; cria a categoria se ainda não
+  /// existir.
+  ///
+  /// Correção de 02/09/2026: a primeira versão chamava
+  /// `.../merchants/{merchantId}/categories` direto — o iFood recusou
+  /// com 404 ("no Route matched"). O caminho real exige o `catalogId`
+  /// no meio: `.../merchants/{merchantId}/catalogs/{catalogId}/categories`.
   private async resolveCategoryId(
     merchantId: string,
     categoryName: string,
     token: string,
   ): Promise<string> {
-    const listRes = await fetch(`${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/categories`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const catalogId = await this.resolveCatalogId(merchantId, token);
+
+    const listRes = await fetch(
+      `${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
 
     if (!listRes.ok) {
       const text = await listRes.text().catch(() => '');
@@ -60,11 +92,16 @@ export class IfoodCatalogSyncService {
     }
 
     const createRes = await fetch(
-      `${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/categories`,
+      `${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: categoryName, status: 'AVAILABLE', template: 'DEFAULT' }),
+        body: JSON.stringify({
+          name: categoryName,
+          status: 'AVAILABLE',
+          template: 'DEFAULT',
+          sequence: 0,
+        }),
       },
     );
 

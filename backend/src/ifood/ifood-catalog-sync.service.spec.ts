@@ -10,6 +10,11 @@ describe('IfoodCatalogSyncService', () => {
   let configService: { get: jest.Mock };
   const originalFetch = global.fetch;
 
+  const CATALOGS_RESPONSE = {
+    ok: true,
+    body: [{ catalogId: 'catalog-001', context: ['DEFAULT'] }],
+  };
+
   beforeEach(() => {
     prisma = { product: { findFirst: jest.fn(), findMany: jest.fn() } };
     authService = { getAccessToken: jest.fn().mockResolvedValue('token-abc') };
@@ -53,6 +58,7 @@ describe('IfoodCatalogSyncService', () => {
       });
 
       const fetchMock = mockFetchSequence(
+        CATALOGS_RESPONSE, // GET catalogs
         { ok: true, body: [{ id: 'cat-lanches-001', name: 'Lanches' }] }, // GET categories
         { ok: true, body: {} }, // PUT items
       );
@@ -61,15 +67,49 @@ describe('IfoodCatalogSyncService', () => {
 
       expect(result).toEqual({ productId: 'prod-1', productName: 'Smash Burger', success: true });
 
-      // não criou categoria nova (só 2 chamadas: listar + PUT item)
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // não criou categoria nova (3 chamadas: catálogos + listar categorias + PUT item)
+      expect(fetchMock).toHaveBeenCalledTimes(3);
 
-      const putCall = fetchMock.mock.calls[1];
+      const catalogsCall = fetchMock.mock.calls[0];
+      expect(catalogsCall[0]).toContain('/catalog/v2.0/merchants/merchant-1/catalogs');
+
+      const listCategoriesCall = fetchMock.mock.calls[1];
+      expect(listCategoriesCall[0]).toContain('/catalogs/catalog-001/categories');
+
+      const putCall = fetchMock.mock.calls[2];
       expect(putCall[0]).toContain('/catalog/v2.0/merchants/merchant-1/items');
       const sentBody = JSON.parse(putCall[1].body);
       expect(sentBody.item.categoryId).toBe('cat-lanches-001');
       expect(sentBody.item.id).toBe('prod-1');
       expect(sentBody.products[0].name).toBe('Smash Burger');
+    });
+
+    it('escolhe o catálogo de contexto DEFAULT quando existe mais de um', async () => {
+      prisma.product.findFirst.mockResolvedValue({
+        id: 'prod-1',
+        name: 'Smash Burger',
+        category: 'Lanches',
+        description: null,
+        salePrice: '28.90',
+        status: 'ACTIVE',
+      });
+
+      const fetchMock = mockFetchSequence(
+        {
+          ok: true,
+          body: [
+            { catalogId: 'catalog-indoor', context: ['INDOOR'] },
+            { catalogId: 'catalog-default', context: ['DEFAULT'] },
+          ],
+        },
+        { ok: true, body: [{ id: 'cat-lanches-001', name: 'Lanches' }] },
+        { ok: true, body: {} },
+      );
+
+      await service.syncProduct('prod-1', 'org-1', 'merchant-1');
+
+      const listCategoriesCall = fetchMock.mock.calls[1];
+      expect(listCategoriesCall[0]).toContain('/catalogs/catalog-default/categories');
     });
 
     it('cria a categoria quando ela ainda não existe no iFood', async () => {
@@ -83,6 +123,7 @@ describe('IfoodCatalogSyncService', () => {
       });
 
       const fetchMock = mockFetchSequence(
+        CATALOGS_RESPONSE,
         { ok: true, body: [] }, // GET categories — nenhuma existente
         { ok: true, body: { id: 'cat-novidades-999' } }, // POST categories
         { ok: true, body: {} }, // PUT items
@@ -91,14 +132,15 @@ describe('IfoodCatalogSyncService', () => {
       const result = await service.syncProduct('prod-1', 'org-1', 'merchant-1');
 
       expect(result.success).toBe(true);
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
 
-      const createCategoryCall = fetchMock.mock.calls[1];
+      const createCategoryCall = fetchMock.mock.calls[2];
+      expect(createCategoryCall[0]).toContain('/catalogs/catalog-001/categories');
       expect(createCategoryCall[1].method).toBe('POST');
       const createdBody = JSON.parse(createCategoryCall[1].body);
       expect(createdBody.name).toBe('Novidades');
 
-      const putCall = fetchMock.mock.calls[2];
+      const putCall = fetchMock.mock.calls[3];
       const sentBody = JSON.parse(putCall[1].body);
       expect(sentBody.item.categoryId).toBe('cat-novidades-999');
     });
@@ -114,13 +156,14 @@ describe('IfoodCatalogSyncService', () => {
       });
 
       const fetchMock = mockFetchSequence(
+        CATALOGS_RESPONSE,
         { ok: true, body: [{ id: 'cat-default', name: 'Cardápio' }] },
         { ok: true, body: {} },
       );
 
       await service.syncProduct('prod-1', 'org-1', 'merchant-1');
 
-      const putCall = fetchMock.mock.calls[1];
+      const putCall = fetchMock.mock.calls[2];
       const sentBody = JSON.parse(putCall[1].body);
       expect(sentBody.item.categoryId).toBe('cat-default');
     });
@@ -144,7 +187,7 @@ describe('IfoodCatalogSyncService', () => {
         salePrice: null,
         status: 'ACTIVE',
       });
-      mockFetchSequence({ ok: true, body: [{ id: 'cat-1', name: 'Lanches' }] });
+      mockFetchSequence(CATALOGS_RESPONSE, { ok: true, body: [{ id: 'cat-1', name: 'Lanches' }] });
 
       const result = await service.syncProduct('prod-1', 'org-1', 'merchant-1');
 
@@ -162,6 +205,7 @@ describe('IfoodCatalogSyncService', () => {
         status: 'ACTIVE',
       });
       mockFetchSequence(
+        CATALOGS_RESPONSE,
         { ok: true, body: [{ id: 'cat-1', name: 'Lanches' }] },
         { ok: false, status: 400, body: 'FullItemDto is not valid' },
       );
@@ -170,6 +214,23 @@ describe('IfoodCatalogSyncService', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('400');
+    });
+
+    it('retorna falha quando falha ao listar catálogos', async () => {
+      prisma.product.findFirst.mockResolvedValue({
+        id: 'prod-1',
+        name: 'Smash Burger',
+        category: 'Lanches',
+        description: null,
+        salePrice: '28.90',
+        status: 'ACTIVE',
+      });
+      mockFetchSequence({ ok: false, status: 401, body: 'unauthorized' });
+
+      const result = await service.syncProduct('prod-1', 'org-1', 'merchant-1');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Falha ao listar catálogos');
     });
 
     it('retorna falha quando falha ao listar categorias', async () => {
@@ -181,7 +242,7 @@ describe('IfoodCatalogSyncService', () => {
         salePrice: '28.90',
         status: 'ACTIVE',
       });
-      mockFetchSequence({ ok: false, status: 401, body: 'unauthorized' });
+      mockFetchSequence(CATALOGS_RESPONSE, { ok: false, status: 401, body: 'unauthorized' });
 
       const result = await service.syncProduct('prod-1', 'org-1', 'merchant-1');
 
@@ -211,8 +272,10 @@ describe('IfoodCatalogSyncService', () => {
           status: 'ACTIVE',
         });
       mockFetchSequence(
+        CATALOGS_RESPONSE,
         { ok: true, body: [{ id: 'cat-1', name: 'Lanches' }] },
         { ok: true, body: {} },
+        CATALOGS_RESPONSE,
         { ok: true, body: [{ id: 'cat-1', name: 'Lanches' }] },
         { ok: true, body: {} },
       );
