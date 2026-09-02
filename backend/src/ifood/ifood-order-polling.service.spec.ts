@@ -93,7 +93,12 @@ describe('IfoodOrderPollingService', () => {
       }, // GET events:polling
       {
         ok: true,
-        body: { id: 'order-1', items: [{ externalCode: 'prod-1', quantity: 2, unitPrice: 28.9 }] },
+        body: {
+          id: 'order-1',
+          items: [
+            { externalCode: '11111111-1111-1111-1111-111111111111', quantity: 2, unitPrice: 28.9 },
+          ],
+        },
       }, // GET order details
       { ok: true, body: {} }, // POST confirm
       { ok: true, body: {} }, // POST acknowledgment
@@ -207,6 +212,62 @@ describe('IfoodOrderPollingService', () => {
     expect(prisma.sale.findFirst).not.toHaveBeenCalled();
   });
 
+  it('CORREÇÃO REAL: item com externalCode que não é UUID válido é pulado sem consultar o banco (evita o erro do Prisma)', async () => {
+    prisma.businessUnit.findMany.mockResolvedValue([BUSINESS_UNIT]);
+    prisma.sale.findFirst.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(USER);
+    // segundo item tem UUID válido — precisa continuar sendo processado
+    // normalmente mesmo depois do primeiro item malformado
+    prisma.product.findFirst.mockResolvedValue({
+      id: '44444444-4444-4444-4444-444444444444',
+      name: 'Fritas',
+    });
+
+    mockFetchSequence(
+      {
+        ok: true,
+        body: [
+          {
+            id: 'event-1',
+            code: 'PLC',
+            fullCode: 'PLACED',
+            orderId: 'order-1',
+            merchantId: 'merchant-1',
+            createdAt: '2026-09-02T10:00:00Z',
+          },
+        ],
+      },
+      {
+        ok: true,
+        body: {
+          id: 'order-1',
+          items: [
+            // reproduz exatamente o erro real reportado pelo usuário:
+            // "Error creating UUID, invalid length: expected length 32
+            // for simple format, found 4" — item de exemplo da loja de
+            // teste do iFood, nunca sincronizado pelo Wave Burger
+            { externalCode: '1a2b', quantity: 1, unitPrice: 10 },
+            { externalCode: '44444444-4444-4444-4444-444444444444', quantity: 1, unitPrice: 8 },
+          ],
+        },
+      },
+      { ok: true, body: {} }, // confirm
+      { ok: true, body: {} }, // acknowledgment
+    );
+
+    await service.pollAllBusinessUnits();
+
+    // NUNCA tentou consultar o banco com o externalCode malformado —
+    // só foi chamado 1 vez, para o item com UUID válido
+    expect(prisma.product.findFirst).toHaveBeenCalledTimes(1);
+    expect(salesService.registerSale).toHaveBeenCalledTimes(1);
+    expect(salesService.registerSale).toHaveBeenCalledWith(
+      expect.objectContaining({ productId: '44444444-4444-4444-4444-444444444444' }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('item sem produto correspondente (externalCode não encontrado) é pulado, mas não trava o resto', async () => {
     prisma.businessUnit.findMany.mockResolvedValue([BUSINESS_UNIT]);
     prisma.sale.findFirst.mockResolvedValue(null);
@@ -234,8 +295,8 @@ describe('IfoodOrderPollingService', () => {
         body: {
           id: 'order-1',
           items: [
-            { externalCode: 'prod-inexistente', quantity: 1, unitPrice: 10 },
-            { externalCode: 'prod-2', quantity: 1, unitPrice: 8 },
+            { externalCode: '22222222-2222-2222-2222-222222222222', quantity: 1, unitPrice: 10 },
+            { externalCode: '33333333-3333-3333-3333-333333333333', quantity: 1, unitPrice: 8 },
           ],
         },
       },

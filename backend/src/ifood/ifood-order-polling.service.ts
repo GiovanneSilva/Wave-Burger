@@ -26,6 +26,9 @@ export interface IfoodOrderDetails {
 }
 
 const POLLING_INTERVAL_MS = 30_000;
+/// Product.id é UUID — usado para validar item.externalCode antes de
+/// consultar o banco (ver comentário no ponto de uso).
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /// Integração iFood — Fase 2 do plano (ver
 /// claude/ifood-integration-plan.md). O núcleo do "puxar
@@ -175,6 +178,23 @@ export class IfoodOrderPollingService {
       }
 
       for (const item of order.items) {
+        // Correção de 02/09/2026: `item.externalCode` pode vir com
+        // qualquer formato (ex.: item de exemplo pré-existente na loja
+        // de teste do iFood, nunca sincronizado pelo Wave Burger) — se
+        // não for um UUID válido, o Prisma lança um erro de tipo ANTES
+        // mesmo de rodar a consulta (já que `Product.id` é coluna UUID),
+        // o que travaria o pedido inteiro sem chegar a tentar os outros
+        // itens. Trata isso como "produto não encontrado", igual a
+        // qualquer outro externalCode sem correspondência.
+        if (!UUID_REGEX.test(item.externalCode)) {
+          this.logger.error(
+            `Pedido ${orderId} do iFood tem item com externalCode que não é um Product.id válido ` +
+              `("${item.externalCode}") — provavelmente um item de exemplo da loja de teste, nunca ` +
+              `sincronizado pelo Wave Burger. Venda não registrada para este item.`,
+          );
+          continue;
+        }
+
         const product = await this.prisma.product.findFirst({
           where: { id: item.externalCode, organizationId: businessUnit.organizationId },
         });
