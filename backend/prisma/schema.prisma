@@ -45,6 +45,13 @@ model BusinessUnit {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
   name           String
+  /// ID da loja (merchant) no iFood — necessário para a Fase 2 do
+  /// plano de integração (Order Polling), que roda sozinha em segundo
+  /// plano e precisa saber qual(is) loja(s) consultar sem depender de
+  /// alguém digitar isso a cada execução (diferente da Fase 1, onde o
+  /// Catalog Sync ainda pedia esse valor na hora, na tela de
+  /// Configurações).
+  ifoodMerchantId String? @map("ifood_merchant_id")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

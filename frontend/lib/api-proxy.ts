@@ -31,7 +31,7 @@ export async function proxyBackendGet(request: NextRequest, backendPath: string)
 export async function proxyBackendMutation(
   request: NextRequest,
   backendPath: string,
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
 ) {
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 

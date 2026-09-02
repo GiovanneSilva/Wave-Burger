@@ -38,7 +38,19 @@ export class SalesService {
   /// venda NUNCA é bloqueada por falta de estoque. Quando o consumo
   /// deixaria algum saldo negativo, a venda é registrada normalmente e
   /// `hadInsufficientStock`/`stockWarnings` sinalizam o ocorrido.
-  async registerSale(dto: CreateSaleDto, actor: ActingUser) {
+  ///
+  /// `internalOptions` (integração iFood, Fase 2): NUNCA exposto no DTO
+  /// público (`POST /sales`) — só preenchido quando o próprio backend
+  /// chama este método diretamente (`IfoodOrderPollingService`), nunca
+  /// a partir de dado vindo do usuário via HTTP. Um pedido do iFood com
+  /// múltiplos itens vira múltiplas `Sale`s, uma por item, todas
+  /// compartilhando o mesmo `externalOrderId` (decisão documentada em
+  /// claude/ifood-integration-plan.md, Seção 11.1).
+  async registerSale(
+    dto: CreateSaleDto,
+    actor: ActingUser,
+    internalOptions?: { origin?: 'MANUAL' | 'IFOOD'; externalOrderId?: string },
+  ) {
     const product = await this.prisma.product.findFirst({
       where: { id: dto.productId, organizationId: actor.organizationId },
     });
@@ -93,6 +105,8 @@ export class SalesService {
           netAmount,
           saleDate: dto.saleDate ? new Date(dto.saleDate) : new Date(),
           soldByUserId: actor.id,
+          origin: internalOptions?.origin ?? 'MANUAL',
+          externalOrderId: internalOptions?.externalOrderId,
         },
       });
 
