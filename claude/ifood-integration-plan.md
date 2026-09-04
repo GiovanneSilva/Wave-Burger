@@ -224,8 +224,10 @@ Mesma lógica se aplica a `FinancialEntry` (`origin: MANUAL | IFOOD`) para rastr
 - **Correção real encontrada durante o teste**: `item.externalCode` de itens de exemplo da loja de teste do iFood não são UUID válido — Prisma lançava erro de tipo antes da query rodar, travando o pedido inteiro. Corrigido com validação de formato (regex) antes de qualquer consulta ao banco.
 - **Detalhes práticos do ambiente de teste do iFood documentados** (fora do nosso código, mas relevantes para testes futuros): geração "automática" de pedido no Portal usa itens genéricos sem relação com o catálogo sincronizado; testar um produto específico exige simular uma compra manual real (login com e-mail de teste do Portal, endereço "Ramal Bujari, 100", pagamento na entrega em dinheiro ou cartão de teste `4111 1111 1111 1111`, nunca PIX/Débito em Conta).
 
-**Próximas fases (não iniciadas):**
-- Fase 3 — Inventário: empurrar "quanto dá pra entregar hoje" pro Catalog do iFood, pausando item automaticamente quando esgotar
+**Progresso da Fase 3 (04/09/2026):**
+- **✅ CONFIRMADA FUNCIONANDO EM PRODUÇÃO REAL.** `IfoodInventorySyncService` (`@Interval` 5 min), reaproveitando 100% de `AnalyticsService.getDeliverableQuantities()`. **Correção real encontrada no primeiro teste**: campo do payload é `amount` (inteiro), não `quantity` como uma das páginas da documentação sugeria — corrigido e confirmado com sucesso na sincronização. **Cenário de auto-pausa testado e confirmado**: zerando o estoque do ingrediente limitante, o item some do cardápio do app do cliente automaticamente (o app do vendedor não destacava "pausado" explicitamente, mas isso não afeta o resultado real). Endpoint manual `POST /ifood/inventory/sync` lê o `merchantId` já salvo (não pede de novo). Descoberta lateral: Inventário só funciona pra item que já passou pelo Catalog Sync — se um produto for cadastrado depois do último sync de catálogo, é preciso rodar "Sincronizar catálogo agora" antes do inventário ter efeito visível (usuário optou por manter esse passo manual, não automatizado).
+
+**Próximas fases:**
 - Fase 4 — Financeiro: reconciliar Settlement do iFood com o módulo Financeiro (Opção B já confirmada — complementa, não substitui)
 - Fase 5 — Homologação e produção
 
