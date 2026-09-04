@@ -62,7 +62,7 @@ describe('IfoodInventorySyncService', () => {
       const firstCall = (global.fetch as jest.Mock).mock.calls[0];
       expect(firstCall[0]).toContain('/catalog/v2.0/merchants/merchant-1/inventory');
       const sentBody = JSON.parse(firstCall[1].body);
-      expect(sentBody).toEqual({ productId: 'prod-1', quantity: 34 });
+      expect(sentBody).toEqual({ productId: 'prod-1', amount: 34 });
     });
 
     it('envia 0 corretamente quando o produto está esgotado — é isso que pausa o item no iFood', async () => {
@@ -80,7 +80,7 @@ describe('IfoodInventorySyncService', () => {
       await service.syncInventory('bu-1', 'org-1', 'merchant-1');
 
       const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
-      expect(sentBody.quantity).toBe(0);
+      expect(sentBody.amount).toBe(0);
     });
 
     it('uma falha num produto não impede a sincronização dos demais', async () => {
@@ -113,6 +113,26 @@ describe('IfoodInventorySyncService', () => {
       expect(results[0].success).toBe(false);
       expect(results[0].error).toContain('404');
       expect(results[1].success).toBe(true);
+    });
+
+    it('CORREÇÃO REAL: envia o campo "amount" (não "quantity") como inteiro — erro real: PostInventoryItemDTO.amount', async () => {
+      analyticsService.getDeliverableQuantities.mockResolvedValue([
+        {
+          productId: 'prod-1',
+          productName: 'Smash Burger',
+          deliverableQuantity: 34,
+          limitingIngredientId: null,
+          limitingIngredientName: null,
+        },
+      ]);
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
+
+      await service.syncInventory('bu-1', 'org-1', 'merchant-1');
+
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(sentBody).toEqual({ productId: 'prod-1', amount: 34 });
+      expect(Number.isInteger(sentBody.amount)).toBe(true);
+      expect(sentBody).not.toHaveProperty('quantity');
     });
 
     it('não sincroniza nada quando não há produtos ativos', async () => {

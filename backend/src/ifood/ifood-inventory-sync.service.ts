@@ -109,10 +109,17 @@ export class IfoodInventorySyncService {
     token: string,
   ): Promise<InventorySyncResult> {
     try {
+      // Correção de 04/09/2026: o campo real esperado pelo iFood é
+      // `amount` (inteiro), não `quantity` — confirmado pelo erro real
+      // "PostInventoryItemDTO.amount should not be empty / must be an
+      // integer number". A documentação tinha uma divergência entre
+      // duas páginas (uma citava `quantity`); o teste real resolveu.
+      // `Math.trunc` garante inteiro mesmo que `deliverableQuantity`
+      // já venha arredondado do calculador (Math.floor).
       const res = await fetch(`${this.baseUrl}/catalog/v2.0/merchants/${merchantId}/inventory`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, quantity }),
+        body: JSON.stringify({ productId, amount: Math.trunc(quantity) }),
       });
 
       if (!res.ok) {
