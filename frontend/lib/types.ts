@@ -302,6 +302,14 @@ export interface CatalogSyncResult {
   error?: string;
 }
 
+export interface InventorySyncResult {
+  productId: string;
+  productName: string;
+  quantity: number;
+  success: boolean;
+  error?: string;
+}
+
 export interface CriticalStockItem {
   id: string;
   currentQuantity: string;

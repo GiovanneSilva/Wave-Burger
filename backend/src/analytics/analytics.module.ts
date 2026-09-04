@@ -11,5 +11,6 @@ import { SuppliersModule } from '../suppliers/suppliers.module';
   imports: [AuthModule, FichaTecnicaModule, StockModule, FinancialModule, SuppliersModule],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
+  exports: [AnalyticsService],
 })
 export class AnalyticsModule {}

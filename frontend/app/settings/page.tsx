@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { CatalogSyncResult } from '@/lib/types';
+import type { CatalogSyncResult, InventorySyncResult } from '@/lib/types';
 
 export default function SettingsPage() {
   const [merchantId, setMerchantId] = useState('');
@@ -89,6 +89,38 @@ export default function SettingsPage() {
 
   const successCount = results?.filter((r) => r.success).length ?? 0;
   const failureCount = results ? results.length - successCount : 0;
+
+  const [inventorySyncing, setInventorySyncing] = useState(false);
+  const [inventoryResults, setInventoryResults] = useState<InventorySyncResult[] | null>(null);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+
+  async function handleInventorySync() {
+    setInventoryError(null);
+    setInventoryResults(null);
+
+    if (!savedMerchantId) {
+      setInventoryError('Salve o ID da loja acima antes de sincronizar.');
+      return;
+    }
+
+    setInventorySyncing(true);
+    try {
+      const res = await fetch('/api/ifood/inventory/sync', { method: 'POST' });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: 'Não foi possível sincronizar o inventário.' }));
+        setInventoryError(body.message);
+        return;
+      }
+
+      setInventoryResults(await res.json());
+    } finally {
+      setInventorySyncing(false);
+    }
+  }
+
+  const inventorySuccessCount = inventoryResults?.filter((r) => r.success).length ?? 0;
+  const inventoryFailureCount = inventoryResults ? inventoryResults.length - inventorySuccessCount : 0;
 
   return (
     <AppShell>
@@ -177,6 +209,60 @@ export default function SettingsPage() {
                         )}
                         <div>
                           <span className="text-foreground">{r.productName}</span>
+                          {!r.success && r.error && <p className="text-xs text-danger">{r.error}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <CardTitle>Integração iFood — Inventário</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 pt-0">
+            <p className="text-sm text-muted-foreground">
+              Envia &quot;quanto dá pra entregar hoje&quot; (Dashboard) pro iFood — quando a quantidade chega a
+              zero, o item é pausado automaticamente lá, sem precisar de nenhuma ação manual. Roda
+              sozinho a cada 5 minutos; o botão abaixo dispara uma sincronização imediata.
+            </p>
+
+            {inventoryError && <p className="text-sm text-danger">{inventoryError}</p>}
+
+            <Button onClick={handleInventorySync} disabled={inventorySyncing} className="self-start">
+              <RefreshCw className={`h-4 w-4 ${inventorySyncing ? 'animate-spin' : ''}`} />
+              {inventorySyncing ? 'Sincronizando…' : 'Sincronizar inventário agora'}
+            </Button>
+
+            {inventoryResults && (
+              <div className="mt-2 border-t border-border pt-4">
+                <p className="mb-3 text-sm font-medium text-foreground">
+                  {inventorySuccessCount} sincronizado{inventorySuccessCount === 1 ? '' : 's'},{' '}
+                  {inventoryFailureCount} falhou{inventoryFailureCount === 1 ? '' : 'ram'}
+                </p>
+
+                {inventoryResults.length === 0 ? (
+                  <EmptyState
+                    title="Nenhum produto ativo para sincronizar"
+                    description="Ative pelo menos um produto antes de sincronizar o inventário."
+                  />
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {inventoryResults.map((r) => (
+                      <div key={r.productId} className="flex items-start gap-2 text-sm">
+                        {r.success ? (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                        ) : (
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                        )}
+                        <div>
+                          <span className="text-foreground">
+                            {r.productName} — {r.quantity} un.
+                          </span>
                           {!r.success && r.error && <p className="text-xs text-danger">{r.error}</p>}
                         </div>
                       </div>
