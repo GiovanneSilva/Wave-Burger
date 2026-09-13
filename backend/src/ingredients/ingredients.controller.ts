@@ -52,4 +52,10 @@ export class IngredientsController {
   deactivate(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ingredientsService.deactivate(id, user);
   }
+
+  @Patch(':id/recalculate-average-cost')
+  @RequirePermissions(PERMISSIONS.INGREDIENTS_MANAGE)
+  recalculateAverageCost(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.ingredientsService.recalculateAverageCostFromLastPurchases(id, user);
+  }
 }

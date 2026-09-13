@@ -12,6 +12,9 @@ describe('IngredientsService', () => {
       findMany: jest.Mock;
       update: jest.Mock;
     };
+    purchaseItem: {
+      findMany: jest.Mock;
+    };
   };
   let audit: { record: jest.Mock };
 
@@ -24,6 +27,9 @@ describe('IngredientsService', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
+      },
+      purchaseItem: {
+        findMany: jest.fn(),
       },
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -122,6 +128,111 @@ describe('IngredientsService', () => {
       expect(result.isActive).toBe(false);
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'DEACTIVATE', entity: 'Ingredient' }),
+      );
+    });
+  });
+
+  describe('recalculateAverageCostFromLastPurchases (05/09/2026, PD-002)', () => {
+    const ingredient = { id: 'ing-1', standardUnit: 'kg', averageCost: null, isActive: true };
+
+    it('EXEMPLO COMPLETO: pondera a penúltima e a última compra confirmada', async () => {
+      // Penúltima compra: 2kg a R$28/kg (valor R$56)
+      // Última compra:    5kg a R$30/kg (valor R$150)
+      // Novo custo médio = (56 + 150) / (2 + 5) = 206/7 ≈ 29,4286
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.purchaseItem.findMany.mockResolvedValue([
+        {
+          quantity: '5',
+          unit: 'kg',
+          totalPrice: '150',
+          purchase: { confirmedAt: new Date('2026-09-02') },
+        },
+        {
+          quantity: '2',
+          unit: 'kg',
+          totalPrice: '56',
+          purchase: { confirmedAt: new Date('2026-08-20') },
+        },
+      ]);
+      prisma.ingredient.update.mockResolvedValue({ ...ingredient, averageCost: '29.4286' });
+
+      await service.recalculateAverageCostFromLastPurchases('ing-1', actor);
+
+      const updateCall = prisma.ingredient.update.mock.calls[0][0];
+      expect(updateCall.data.averageCost).toBeCloseTo(29.4286, 4);
+    });
+
+    it('só uma compra no histórico — usa o preço dela diretamente, sem ponderar', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.purchaseItem.findMany.mockResolvedValue([
+        {
+          quantity: '3',
+          unit: 'kg',
+          totalPrice: '90',
+          purchase: { confirmedAt: new Date('2026-09-01') },
+        },
+      ]);
+      prisma.ingredient.update.mockResolvedValue({ ...ingredient, averageCost: '30' });
+
+      await service.recalculateAverageCostFromLastPurchases('ing-1', actor);
+
+      const updateCall = prisma.ingredient.update.mock.calls[0][0];
+      expect(updateCall.data.averageCost).toBe(30); // 90/3
+    });
+
+    it('REJEITA quando não há nenhuma compra confirmada no histórico', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.purchaseItem.findMany.mockResolvedValue([]);
+
+      await expect(service.recalculateAverageCostFromLastPurchases('ing-1', actor)).rejects.toThrow(
+        'Nenhuma compra confirmada encontrada',
+      );
+      expect(prisma.ingredient.update).not.toHaveBeenCalled();
+    });
+
+    it('converte unidades diferentes entre as duas compras antes de ponderar (kg vs g)', async () => {
+      // Penúltima: 500g a R$0,03/g (valor R$15) = equivalente a 0,5kg
+      // Última:    2kg a R$32/kg (valor R$64)
+      // Novo custo médio = (15 + 64) / (0.5 + 2) = 79/2.5 = R$31,60/kg
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.purchaseItem.findMany.mockResolvedValue([
+        {
+          quantity: '2',
+          unit: 'kg',
+          totalPrice: '64',
+          purchase: { confirmedAt: new Date('2026-09-02') },
+        },
+        {
+          quantity: '500',
+          unit: 'g',
+          totalPrice: '15',
+          purchase: { confirmedAt: new Date('2026-08-20') },
+        },
+      ]);
+      prisma.ingredient.update.mockResolvedValue({ ...ingredient, averageCost: '31.6' });
+
+      await service.recalculateAverageCostFromLastPurchases('ing-1', actor);
+
+      const updateCall = prisma.ingredient.update.mock.calls[0][0];
+      expect(updateCall.data.averageCost).toBeCloseTo(31.6, 4);
+    });
+
+    it('registra auditoria com o número de compras usadas no cálculo', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.purchaseItem.findMany.mockResolvedValue([
+        { quantity: '5', unit: 'kg', totalPrice: '150', purchase: { confirmedAt: new Date() } },
+        { quantity: '2', unit: 'kg', totalPrice: '56', purchase: { confirmedAt: new Date() } },
+      ]);
+      prisma.ingredient.update.mockResolvedValue({ ...ingredient, averageCost: '29.4286' });
+
+      await service.recalculateAverageCostFromLastPurchases('ing-1', actor);
+
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'RECALCULATE_AVERAGE_COST',
+          entity: 'Ingredient',
+          metadata: expect.objectContaining({ basedOnPurchaseCount: 2 }),
+        }),
       );
     });
   });

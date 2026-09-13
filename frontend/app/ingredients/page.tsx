@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/wave/page-header';
@@ -19,6 +20,7 @@ import type { Ingredient } from '@/lib/types';
 const UNITS = ['kg', 'g', 'l', 'ml', 'un'];
 
 export default function IngredientsPage() {
+  const router = useRouter();
   const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,6 +210,7 @@ export default function IngredientsPage() {
             columns={columns}
             data={ingredients}
             rowKey={(i) => i.id}
+            onRowClick={(i) => router.push(`/ingredients/${i.id}/edit`)}
             emptyTitle="Nenhum ingrediente ainda"
             emptyDescription="Cadastre o primeiro ingrediente para começar a montar fichas técnicas."
           />
