@@ -26,6 +26,16 @@ export interface CreateEntryFromSaleInput {
   createdByUserId: string;
 }
 
+/// Ver StockLossFinancialListener — reage a `stock.adjustment.registered`
+/// quando uma SAÍDA manual de estoque acontece.
+export interface CreateEntryFromStockLossInput {
+  organizationId: string;
+  businessUnitId: string;
+  description: string;
+  grossAmount: number;
+  createdByUserId: string;
+}
+
 @Injectable()
 export class FinancialService {
   constructor(
@@ -111,6 +121,31 @@ export class FinancialService {
         saleId: input.saleId,
         grossAmount: input.netAmount,
         createdByUserId: input.createdByUserId,
+      },
+    });
+  }
+
+  /// Decisão de negócio confirmada com o usuário em 04/09/2026: uma
+  /// perda de estoque (ingrediente já pago ao fornecedor, dado baixa
+  /// por perda/desperdício/correção) já é um fato consumado no momento
+  /// em que acontece — não é uma conta a pagar futura para ninguém, é
+  /// reconhecimento imediato de uma despesa. Por isso nasce direto como
+  /// `PAID`/`settledAt=agora`, refletindo no Fluxo de Caixa e no DRE do
+  /// próprio dia, sem precisar de nenhuma liquidação manual posterior
+  /// (diferente de compra/venda, que representam obrigação futura até
+  /// alguém marcar como paga).
+  async createEntryFromStockLoss(input: CreateEntryFromStockLossInput) {
+    return this.prisma.financialEntry.create({
+      data: {
+        organizationId: input.organizationId,
+        businessUnitId: input.businessUnitId,
+        type: 'PAYABLE',
+        category: 'PERDA_ESTOQUE',
+        description: input.description,
+        grossAmount: input.grossAmount,
+        createdByUserId: input.createdByUserId,
+        status: 'PAID',
+        settledAt: new Date(),
       },
     });
   }

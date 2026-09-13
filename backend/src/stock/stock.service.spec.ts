@@ -2,11 +2,13 @@ import { NotFoundException, UnprocessableEntityException } from '@nestjs/common'
 import { StockService } from './stock.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('StockService', () => {
   let service: StockService;
   let prisma: any;
   let audit: { record: jest.Mock };
+  let eventEmitter: { emit: jest.Mock };
 
   const ingredient = { id: 'ing-1', standardUnit: 'kg', minimumStock: '10.0000' };
   const businessUnit = { id: 'bu-1' };
@@ -20,9 +22,11 @@ describe('StockService', () => {
       $transaction: jest.fn(),
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
+    eventEmitter = { emit: jest.fn() };
     service = new StockService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditService,
+      eventEmitter as unknown as EventEmitter2,
     );
   });
 
@@ -269,6 +273,70 @@ describe('StockService', () => {
       );
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('createManualAdjustment — emissão de evento para o Financeiro (04/09/2026)', () => {
+    it('emite stock.adjustment.registered com direction OUT ao dar baixa manual', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.businessUnit.findFirst.mockResolvedValue(businessUnit);
+      mockTransaction(
+        { currentQuantity: '5.0000' },
+        { id: 'mov-1', quantityStandardUnit: '0.5000' },
+        { currentQuantity: '4.5000' },
+      );
+
+      await service.createManualAdjustment(
+        {
+          businessUnitId: 'bu-1',
+          ingredientId: 'ing-1',
+          direction: 'OUT',
+          quantity: '0.5',
+          unit: 'kg',
+          reason: 'LOSS',
+        } as any,
+        { id: 'user-1', organizationId: 'org-1' },
+      );
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'stock.adjustment.registered',
+        expect.objectContaining({
+          organizationId: 'org-1',
+          businessUnitId: 'bu-1',
+          ingredientId: 'ing-1',
+          direction: 'OUT',
+          quantityStandardUnit: 0.5,
+          reason: 'LOSS',
+          performedByUserId: 'user-1',
+        }),
+      );
+    });
+
+    it('emite o evento também para ENTRADA — quem decide se gera lançamento é o listener, não o StockService', async () => {
+      prisma.ingredient.findFirst.mockResolvedValue(ingredient);
+      prisma.businessUnit.findFirst.mockResolvedValue(businessUnit);
+      mockTransaction(
+        { currentQuantity: '5.0000' },
+        { id: 'mov-1', quantityStandardUnit: '2.0000' },
+        { currentQuantity: '7.0000' },
+      );
+
+      await service.createManualAdjustment(
+        {
+          businessUnitId: 'bu-1',
+          ingredientId: 'ing-1',
+          direction: 'IN',
+          quantity: '2',
+          unit: 'kg',
+          reason: 'INVENTORY',
+        } as any,
+        { id: 'user-1', organizationId: 'org-1' },
+      );
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'stock.adjustment.registered',
+        expect.objectContaining({ direction: 'IN' }),
+      );
     });
   });
 });

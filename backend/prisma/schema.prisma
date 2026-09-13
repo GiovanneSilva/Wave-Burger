@@ -557,6 +557,11 @@ enum FinancialCategory {
   ADMINISTRATIVO
   MANUTENCAO
   VENDAS
+  /// Lançamento automático de perda de estoque (ver
+  /// StockLossFinancialListener) — categoria separada de MATERIA_PRIMA
+  /// de propósito, pra não misturar "custo do que foi vendido" com
+  /// "custo do que se perdeu" no DRE.
+  PERDA_ESTOQUE
 }
 
 enum FinancialEntryStatus {

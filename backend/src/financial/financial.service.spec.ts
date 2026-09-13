@@ -149,4 +149,29 @@ describe('FinancialService', () => {
       expect(result.resultadoOperacional).toBe(3800); // 10000-1200-0-3000-2000
     });
   });
+
+  describe('createEntryFromStockLoss', () => {
+    it('cria o lançamento já como PAGO/liquidado na hora — não é uma conta a pagar futura', async () => {
+      const created = { id: 'entry-1', category: 'PERDA_ESTOQUE', status: 'PAID' };
+      prisma.financialEntry.create.mockResolvedValue(created);
+
+      await service.createEntryFromStockLoss({
+        organizationId: 'org-1',
+        businessUnitId: 'bu-1',
+        description: 'Perda de estoque — Carne (0.5 kg)',
+        grossAmount: 15,
+        createdByUserId: 'user-1',
+      });
+
+      expect(prisma.financialEntry.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'PAYABLE',
+          category: 'PERDA_ESTOQUE',
+          grossAmount: 15,
+          status: 'PAID',
+          settledAt: expect.any(Date),
+        }),
+      });
+    });
+  });
 });

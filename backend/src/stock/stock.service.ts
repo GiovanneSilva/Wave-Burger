@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { convertQuantity } from '../common/unit-conversion';
 import { CreateStockAdjustmentDto } from './dto/create-stock-adjustment.dto';
+import {
+  STOCK_ADJUSTMENT_REGISTERED_EVENT,
+  StockAdjustmentRegisteredEvent,
+} from './events/stock-adjustment-registered.event';
 
 interface ActingUser {
   id: string;
@@ -36,6 +41,7 @@ export class StockService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /// Núcleo do módulo, versão "standalone": abre sua própria transação.
@@ -161,9 +167,12 @@ export class StockService {
   }
 
   /// RF-017: endpoint de ajuste manual — usuário informa motivo
-  /// obrigatório (LOSS/WASTE/INVENTORY/CORRECTION/RETURN).
+  /// obrigatório (LOSS/WASTE/INVENTORY/CORRECTION/RETURN). Emite
+  /// `stock.adjustment.registered` (04/09/2026) para que o Financeiro
+  /// possa reagir a saídas manuais sem o StockModule precisar conhecer
+  /// FinancialModule — mesmo padrão desacoplado de `sale.registered`.
   async createManualAdjustment(dto: CreateStockAdjustmentDto, actor: ActingUser) {
-    return this.applyMovement({
+    const result = await this.applyMovement({
       organizationId: actor.organizationId,
       businessUnitId: dto.businessUnitId,
       ingredientId: dto.ingredientId,
@@ -175,6 +184,19 @@ export class StockService {
       performedByUserId: actor.id,
       notes: dto.notes,
     });
+
+    const event: StockAdjustmentRegisteredEvent = {
+      organizationId: actor.organizationId,
+      businessUnitId: dto.businessUnitId,
+      ingredientId: dto.ingredientId,
+      direction: dto.direction,
+      quantityStandardUnit: Number(result.movement.quantityStandardUnit),
+      reason: dto.reason,
+      performedByUserId: actor.id,
+    };
+    this.eventEmitter.emit(STOCK_ADJUSTMENT_REGISTERED_EVENT, event);
+
+    return result;
   }
 
   async getBalance(businessUnitId: string, ingredientId: string, organizationId: string) {
