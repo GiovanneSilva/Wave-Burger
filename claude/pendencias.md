@@ -6,7 +6,6 @@ Este arquivo rastreia decisões de negócio ainda não fechadas. Nenhuma delas d
 
 | ID | Descrição | Módulo impactado |
 |----|-----------|-------------------|
-| PD-002 | Metodologia definitiva de custo médio e tratamento de variações | Ingredientes, Compras |
 | PD-003 | Como custos indiretos (energia, gás, mão de obra) entram na ficha técnica | Ficha Técnica |
 | PD-004 | Quando e como ocorre a integração automática com iFood | Integração iFood |
 | PD-005 | Papel exato de planilhas (Excel/Sheets) vs. banco de dados na fase inicial | Operação geral |
@@ -34,3 +33,4 @@ Quando uma pendência for resolvida, mover a linha para a tabela "Resolvidas" ab
 |----|-----------|---------|------|
 | PD-001 | Política para venda sem estoque: bloquear ou apenas sinalizar | **Permitir e sinalizar.** A venda nunca é bloqueada por falta de estoque — o consumo é aplicado mesmo que o saldo fique negativo, e a venda registra `hadInsufficientStock=true` + lista de ingredientes afetados (`stockWarnings`) na resposta da API e no log de auditoria. Implementado em `StockService.applyMovement` via parâmetro `allowNegative`, usado apenas por Vendas — Compras e ajustes manuais continuam bloqueando saldo negativo (BR-010 inalterado para esses casos). | 2026-08-17 (Etapa 16) |
 | PD-010 | Não há RF formal para o módulo de Venda/Pedido manual (campos, fluxo de desconto, etc.) | Escopo confirmado com o usuário antes da Etapa 16: (1) uma venda representa um único produto (produto + quantidade + preço + data) — não um pedido com múltiplos itens; (2) desconto simples incluído (tipo percentual ou fixo + valor). Modelo `Sale` implementado com esse escopo. Pedidos com múltiplos itens/carrinho ficam para evolução futura, se solicitado. | 2026-08-17 (Etapa 16) |
+| PD-002 | Metodologia definitiva de custo médio e tratamento de variações | **Custo médio ponderado móvel** — o método reconhecido pela Receita Federal para CMV. A cada compra confirmada, `Ingredient.averageCost` é recalculado: `(valor do estoque anterior + valor desta compra) ÷ (quantidade anterior + quantidade comprada)`. Implementado em `calculateWeightedAverageCost` (`backend/src/ingredients/average-cost-calculator.ts`) + `IngredientsPurchaseListener`. A quantidade "anterior" é capturada por `PurchasesService.confirm()` antes de qualquer listener rodar, evitando depender da ordem de execução entre os 3 listeners de `purchase.confirmed` (Estoque/Financeiro/Custo do Ingrediente rodam sem ordem garantida, já que o evento usa `emit()`, não `emitAsync()`). | 2026-09-05 |

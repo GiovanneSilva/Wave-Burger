@@ -6,19 +6,21 @@ import {
   PURCHASE_CONFIRMED_EVENT,
   PurchaseConfirmedEvent,
 } from '../purchases/events/purchase-confirmed.event';
-import { convertPricePerUnit } from '../common/unit-conversion';
+import { convertPricePerUnit, convertQuantity } from '../common/unit-conversion';
+import { calculateWeightedAverageCost } from './average-cost-calculator';
 
 /**
  * Reage a `purchase.confirmed` (Etapa 12) sem que PurchasesModule saiba
  * que este listener existe — desacoplamento via evento interno
  * (claude/CLAUDE.md, Seção 4).
  *
- * Atualiza APENAS `lastCost`/`lastPurchaseDate` do ingrediente — dado
- * objetivo e sem ambiguidade (RF-009 "último custo" = preço da compra
- * mais recente). NUNCA atualiza `averageCost`: a metodologia de custo
- * médio é PD-002, que segue sem definição no Documento Mestre. BR-008
- * ("compras deverão atualizar o custo médio") permanece parcialmente
- * não implementado por esse motivo — decisão registrada em claude/CLAUDE.md.
+ * Atualiza `lastCost`/`lastPurchaseDate` (RF-009 "último custo" = preço
+ * da compra mais recente, sem ambiguidade) E, desde 05/09/2026,
+ * `averageCost` — PD-002 resolvida a pedido do usuário: custo médio
+ * ponderado móvel (`calculateWeightedAverageCost`), usando
+ * `item.stockQuantityBeforePurchase` capturado por
+ * `PurchasesService.confirm()` antes de qualquer listener rodar (evita
+ * depender de ordem de execução entre listeners do mesmo evento).
  */
 @Injectable()
 export class IngredientsPurchaseListener {
@@ -42,6 +44,19 @@ export class IngredientsPurchaseListener {
         item.unit,
         ingredient.standardUnit,
       );
+      const purchaseQuantityStandardUnit = convertQuantity(
+        Number(item.quantity),
+        item.unit,
+        ingredient.standardUnit,
+      );
+
+      const newAverageCost = calculateWeightedAverageCost({
+        previousQuantity: Number(item.stockQuantityBeforePurchase),
+        previousAverageCost:
+          ingredient.averageCost !== null ? Number(ingredient.averageCost) : null,
+        purchaseQuantity: purchaseQuantityStandardUnit,
+        purchaseTotalValue: Number(item.totalPrice),
+      });
 
       const before = ingredient;
       const updated = await this.prisma.ingredient.update({
@@ -49,20 +64,30 @@ export class IngredientsPurchaseListener {
         data: {
           lastCost: costPerStandardUnit,
           lastPurchaseDate: event.confirmedAt,
+          averageCost: newAverageCost,
         },
       });
 
       await this.auditService.record({
         organizationId: event.organizationId,
         userId: event.confirmedByUserId,
-        action: 'UPDATE_LAST_COST_FROM_PURCHASE',
+        action: 'UPDATE_COST_FROM_PURCHASE',
         entity: 'Ingredient',
         entityId: item.ingredientId,
-        previousValue: { lastCost: before.lastCost, lastPurchaseDate: before.lastPurchaseDate },
-        newValue: { lastCost: updated.lastCost, lastPurchaseDate: updated.lastPurchaseDate },
+        previousValue: {
+          lastCost: before.lastCost,
+          lastPurchaseDate: before.lastPurchaseDate,
+          averageCost: before.averageCost,
+        },
+        newValue: {
+          lastCost: updated.lastCost,
+          lastPurchaseDate: updated.lastPurchaseDate,
+          averageCost: updated.averageCost,
+        },
         metadata: {
           purchaseId: event.purchaseId,
-          note: 'averageCost não foi alterado — metodologia de custo médio depende de PD-002, ainda em aberto.',
+          stockQuantityBeforePurchase: item.stockQuantityBeforePurchase,
+          note: 'averageCost calculado por custo médio ponderado móvel (PD-002, resolvida em 05/09/2026).',
         },
       });
     }

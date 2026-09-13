@@ -150,6 +150,26 @@ export class PurchasesService {
       newValue: { status: 'CONFIRMED' },
     });
 
+    // PD-002 (05/09/2026): captura o saldo de estoque de cada
+    // ingrediente ANTES de qualquer listener rodar, pra
+    // IngredientsPurchaseListener calcular o custo médio ponderado
+    // móvel sem depender da ordem de execução entre listeners.
+    const stockQuantitiesBefore = new Map<string, string>();
+    for (const item of updated.items) {
+      const balance = await this.prisma.stockBalance.findUnique({
+        where: {
+          businessUnitId_ingredientId: {
+            businessUnitId: updated.businessUnitId,
+            ingredientId: item.ingredientId,
+          },
+        },
+      });
+      stockQuantitiesBefore.set(
+        item.ingredientId,
+        balance ? balance.currentQuantity.toString() : '0',
+      );
+    }
+
     const event: PurchaseConfirmedEvent = {
       purchaseId: updated.id,
       organizationId: actor.organizationId,
@@ -164,6 +184,7 @@ export class PurchasesService {
         unit: item.unit,
         unitPrice: item.unitPrice.toString(),
         totalPrice: item.totalPrice.toString(),
+        stockQuantityBeforePurchase: stockQuantitiesBefore.get(item.ingredientId) ?? '0',
       })),
     };
     this.eventEmitter.emit(PURCHASE_CONFIRMED_EVENT, event);

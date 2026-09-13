@@ -33,6 +33,7 @@ describe('StockPurchaseListener (BR-006)', () => {
           unit: 'kg',
           unitPrice: '30',
           totalPrice: '150',
+          stockQuantityBeforePurchase: '0',
         },
       ],
     };
@@ -68,6 +69,7 @@ describe('StockPurchaseListener (BR-006)', () => {
           unit: 'kg',
           unitPrice: '30',
           totalPrice: '150',
+          stockQuantityBeforePurchase: '0',
         },
         {
           ingredientId: 'ing-queijo',
@@ -75,6 +77,7 @@ describe('StockPurchaseListener (BR-006)', () => {
           unit: 'kg',
           unitPrice: '25',
           totalPrice: '50',
+          stockQuantityBeforePurchase: '0',
         },
       ],
     };

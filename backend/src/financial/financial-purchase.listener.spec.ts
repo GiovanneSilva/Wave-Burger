@@ -32,6 +32,7 @@ describe('FinancialPurchaseListener (BR-007)', () => {
           unit: 'kg',
           unitPrice: '30',
           totalPrice: '150',
+          stockQuantityBeforePurchase: '0',
         },
       ],
     };

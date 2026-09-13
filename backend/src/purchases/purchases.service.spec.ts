@@ -19,6 +19,7 @@ describe('PurchasesService', () => {
       businessUnit: { findFirst: jest.fn() },
       ingredient: { findMany: jest.fn() },
       purchase: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+      stockBalance: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(),
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -138,6 +139,98 @@ describe('PurchasesService', () => {
               totalPrice: '150.0000',
             }),
           ],
+        }),
+      );
+    });
+
+    it('PD-002 (05/09/2026): captura o saldo de estoque anterior de cada ingrediente no evento', async () => {
+      prisma.purchase.findFirst.mockResolvedValue({
+        id: 'purch-1',
+        status: 'DRAFT',
+        organizationId: 'org-1',
+        businessUnitId: 'bu-1',
+        supplierId: 'sup-1',
+        totalAmount: 150,
+        items: [{ ingredientId: 'ing-1', quantity: 5, unit: 'kg', unitPrice: 30, totalPrice: 150 }],
+      });
+
+      const updatedPurchase = {
+        id: 'purch-1',
+        status: 'CONFIRMED',
+        businessUnitId: 'bu-1',
+        supplierId: 'sup-1',
+        totalAmount: { toString: () => '150.0000' },
+        items: [
+          {
+            ingredientId: 'ing-1',
+            quantity: { toString: () => '5.0000' },
+            unit: 'kg',
+            unitPrice: { toString: () => '30.0000' },
+            totalPrice: { toString: () => '150.0000' },
+          },
+        ],
+      };
+      prisma.$transaction.mockImplementation(async (fn: any) => {
+        const txClient = { purchase: { update: jest.fn().mockResolvedValue(updatedPurchase) } };
+        return fn(txClient);
+      });
+
+      // ingrediente já tinha 2kg em estoque antes desta compra
+      prisma.stockBalance.findUnique.mockResolvedValue({
+        currentQuantity: { toString: () => '2.0000' },
+      });
+
+      await service.confirm('purch-1', actor);
+
+      expect(prisma.stockBalance.findUnique).toHaveBeenCalledWith({
+        where: { businessUnitId_ingredientId: { businessUnitId: 'bu-1', ingredientId: 'ing-1' } },
+      });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        PURCHASE_CONFIRMED_EVENT,
+        expect.objectContaining({
+          items: [expect.objectContaining({ stockQuantityBeforePurchase: '2.0000' })],
+        }),
+      );
+    });
+
+    it('PD-002: ingrediente nunca comprado antes (sem StockBalance) captura "0" no evento', async () => {
+      prisma.purchase.findFirst.mockResolvedValue({
+        id: 'purch-1',
+        status: 'DRAFT',
+        organizationId: 'org-1',
+        businessUnitId: 'bu-1',
+        supplierId: 'sup-1',
+        totalAmount: 150,
+        items: [{ ingredientId: 'ing-1', quantity: 5, unit: 'kg', unitPrice: 30, totalPrice: 150 }],
+      });
+      const updatedPurchase = {
+        id: 'purch-1',
+        status: 'CONFIRMED',
+        businessUnitId: 'bu-1',
+        supplierId: 'sup-1',
+        totalAmount: { toString: () => '150.0000' },
+        items: [
+          {
+            ingredientId: 'ing-1',
+            quantity: { toString: () => '5.0000' },
+            unit: 'kg',
+            unitPrice: { toString: () => '30.0000' },
+            totalPrice: { toString: () => '150.0000' },
+          },
+        ],
+      };
+      prisma.$transaction.mockImplementation(async (fn: any) => {
+        const txClient = { purchase: { update: jest.fn().mockResolvedValue(updatedPurchase) } };
+        return fn(txClient);
+      });
+      prisma.stockBalance.findUnique.mockResolvedValue(null);
+
+      await service.confirm('purch-1', actor);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        PURCHASE_CONFIRMED_EVENT,
+        expect.objectContaining({
+          items: [expect.objectContaining({ stockQuantityBeforePurchase: '0' })],
         }),
       );
     });

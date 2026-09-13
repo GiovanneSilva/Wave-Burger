@@ -35,6 +35,7 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
           unit: 'kg',
           unitPrice: '30.0000',
           totalPrice: '150.0000',
+          stockQuantityBeforePurchase: '0',
         },
       ],
       ...overrides,
@@ -47,7 +48,7 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
       standardUnit: 'kg',
       lastCost: null,
       lastPurchaseDate: null,
-      averageCost: '25.0000', // custo médio existente ANTES do evento
+      averageCost: null,
     });
     prisma.ingredient.update.mockResolvedValue({
       id: 'ing-1',
@@ -57,26 +58,89 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
 
     await listener.handlePurchaseConfirmed(buildEvent());
 
-    expect(prisma.ingredient.update).toHaveBeenCalledWith({
-      where: { id: 'ing-1' },
-      data: { lastCost: 30, lastPurchaseDate: new Date('2026-08-17T12:00:00Z') },
-    });
+    const updateCall = prisma.ingredient.update.mock.calls[0][0];
+    expect(updateCall.where).toEqual({ id: 'ing-1' });
+    expect(updateCall.data.lastCost).toBe(30);
+    expect(updateCall.data.lastPurchaseDate).toEqual(new Date('2026-08-17T12:00:00Z'));
   });
 
-  it('NUNCA inclui averageCost no update — PD-002 permanece sem definição', async () => {
-    prisma.ingredient.findUnique.mockResolvedValue({
-      id: 'ing-1',
-      standardUnit: 'kg',
-      lastCost: null,
-      lastPurchaseDate: null,
-      averageCost: '25.0000',
+  describe('PD-002 (05/09/2026, resolvida) — custo médio ponderado móvel', () => {
+    it('EXEMPLO COMPLETO: pondera o custo médio existente pela quantidade que já estava em estoque', async () => {
+      // 2kg em estoque a R$28/kg (valor: R$56) + compra de 5kg a R$30/kg (valor: R$150)
+      // novo custo médio = (56 + 150) / (2 + 5) = 206/7 ≈ 29,4286
+      prisma.ingredient.findUnique.mockResolvedValue({
+        id: 'ing-1',
+        standardUnit: 'kg',
+        lastCost: null,
+        lastPurchaseDate: null,
+        averageCost: '28.0000',
+      });
+      prisma.ingredient.update.mockResolvedValue({});
+
+      await listener.handlePurchaseConfirmed(
+        buildEvent({
+          items: [
+            {
+              ingredientId: 'ing-1',
+              quantity: '5',
+              unit: 'kg',
+              unitPrice: '30',
+              totalPrice: '150',
+              stockQuantityBeforePurchase: '2',
+            },
+          ],
+        }),
+      );
+
+      const updateCall = prisma.ingredient.update.mock.calls[0][0];
+      expect(updateCall.data.averageCost).toBeCloseTo(29.4286, 4);
     });
-    prisma.ingredient.update.mockResolvedValue({});
 
-    await listener.handlePurchaseConfirmed(buildEvent());
+    it('primeira compra de todas (sem custo médio prévio, estoque zerado) — custo médio vira o preço desta compra', async () => {
+      prisma.ingredient.findUnique.mockResolvedValue({
+        id: 'ing-1',
+        standardUnit: 'kg',
+        lastCost: null,
+        lastPurchaseDate: null,
+        averageCost: null,
+      });
+      prisma.ingredient.update.mockResolvedValue({});
 
-    const updateCall = prisma.ingredient.update.mock.calls[0][0];
-    expect(updateCall.data).not.toHaveProperty('averageCost');
+      await listener.handlePurchaseConfirmed(buildEvent());
+
+      const updateCall = prisma.ingredient.update.mock.calls[0][0];
+      expect(updateCall.data.averageCost).toBe(30);
+    });
+
+    it('usa item.stockQuantityBeforePurchase capturado pelo PurchasesService — não depende de reconsultar o saldo', async () => {
+      prisma.ingredient.findUnique.mockResolvedValue({
+        id: 'ing-1',
+        standardUnit: 'kg',
+        lastCost: null,
+        lastPurchaseDate: null,
+        averageCost: '20.0000',
+      });
+      prisma.ingredient.update.mockResolvedValue({});
+
+      await listener.handlePurchaseConfirmed(
+        buildEvent({
+          items: [
+            {
+              ingredientId: 'ing-1',
+              quantity: '1',
+              unit: 'kg',
+              unitPrice: '100',
+              totalPrice: '100',
+              stockQuantityBeforePurchase: '100', // muito estoque prévio, dilui bastante
+            },
+          ],
+        }),
+      );
+
+      const updateCall = prisma.ingredient.update.mock.calls[0][0];
+      // (100*20 + 1*100) / 101 ≈ 20,7921
+      expect(updateCall.data.averageCost).toBeCloseTo(20.7921, 4);
+    });
   });
 
   it('converte o preço quando a unidade da compra difere da unidade padrão do ingrediente (kg vs g)', async () => {
@@ -99,6 +163,7 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
             unit: 'g',
             unitPrice: '0.03',
             totalPrice: '150',
+            stockQuantityBeforePurchase: '0',
           },
         ],
       }),
@@ -108,7 +173,7 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
     expect(updateCall.data.lastCost).toBeCloseTo(30, 4);
   });
 
-  it('registra auditoria com nota explícita sobre PD-002', async () => {
+  it('registra auditoria mencionando o custo médio ponderado móvel', async () => {
     prisma.ingredient.findUnique.mockResolvedValue({
       id: 'ing-1',
       standardUnit: 'kg',
@@ -119,13 +184,14 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
     prisma.ingredient.update.mockResolvedValue({
       lastCost: '30.0000',
       lastPurchaseDate: new Date(),
+      averageCost: '30.0000',
     });
 
     await listener.handlePurchaseConfirmed(buildEvent());
 
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'UPDATE_LAST_COST_FROM_PURCHASE',
+        action: 'UPDATE_COST_FROM_PURCHASE',
         entity: 'Ingredient',
         metadata: expect.objectContaining({ note: expect.stringContaining('PD-002') }),
       }),
@@ -134,15 +200,29 @@ describe('IngredientsPurchaseListener — reage a purchase.confirmed sem acoplam
 
   it('processa múltiplos itens de uma mesma compra, um ingrediente por vez', async () => {
     prisma.ingredient.findUnique
-      .mockResolvedValueOnce({ id: 'ing-1', standardUnit: 'kg' })
-      .mockResolvedValueOnce({ id: 'ing-2', standardUnit: 'l' });
+      .mockResolvedValueOnce({ id: 'ing-1', standardUnit: 'kg', averageCost: null })
+      .mockResolvedValueOnce({ id: 'ing-2', standardUnit: 'l', averageCost: null });
     prisma.ingredient.update.mockResolvedValue({});
 
     await listener.handlePurchaseConfirmed(
       buildEvent({
         items: [
-          { ingredientId: 'ing-1', quantity: '5', unit: 'kg', unitPrice: '30', totalPrice: '150' },
-          { ingredientId: 'ing-2', quantity: '10', unit: 'l', unitPrice: '5', totalPrice: '50' },
+          {
+            ingredientId: 'ing-1',
+            quantity: '5',
+            unit: 'kg',
+            unitPrice: '30',
+            totalPrice: '150',
+            stockQuantityBeforePurchase: '0',
+          },
+          {
+            ingredientId: 'ing-2',
+            quantity: '10',
+            unit: 'l',
+            unitPrice: '5',
+            totalPrice: '50',
+            stockQuantityBeforePurchase: '0',
+          },
         ],
       }),
     );

@@ -11,10 +11,12 @@ export const PURCHASE_CONFIRMED_EVENT = 'purchase.confirmed';
  * "efeitos entre módulos devem ser implementados via serviços de aplicação
  * ou eventos internos, nunca duplicando lógica em cada módulo").
  *
- * BR-006 (compra confirmada gera entrada de estoque) e BR-007 (compra
- * gera lançamento financeiro) permanecem NÃO implementados — só o
- * contrato do evento existe agora. O único listener ativo hoje é
- * IngredientsPurchaseListener (atualiza lastCost/lastPurchaseDate).
+ * `items[].stockQuantityBeforePurchase` (05/09/2026, PD-002): saldo de
+ * estoque do ingrediente, em unidade padrão, capturado por
+ * `PurchasesService.confirm()` ANTES de qualquer listener rodar —
+ * necessário para `IngredientsPurchaseListener` calcular o custo médio
+ * ponderado móvel sem depender da ordem de execução entre listeners
+ * (`eventEmitter.emit()` não garante ordem/conclusão entre eles).
  */
 export interface PurchaseConfirmedEvent {
   purchaseId: string;
@@ -30,5 +32,6 @@ export interface PurchaseConfirmedEvent {
     unit: string;
     unitPrice: string;
     totalPrice: string;
+    stockQuantityBeforePurchase: string;
   }>;
 }
