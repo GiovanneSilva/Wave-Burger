@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/wave/page-header';
@@ -19,6 +19,7 @@ import type { Product, FichaTecnicaVersion, CurrentCostSummary } from '@/lib/typ
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const productId = params.id;
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -112,6 +113,9 @@ export default function ProductDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge label={statusInfo.label} tone={statusInfo.tone} />
+            <Button variant="secondary" size="sm" onClick={() => router.push(`/products/${productId}/edit`)}>
+              Editar
+            </Button>
             {!isInactive && (
               <Button
                 variant={isActive ? 'secondary' : 'default'}
