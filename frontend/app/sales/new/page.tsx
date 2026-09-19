@@ -21,6 +21,18 @@ export default function NewSalePage() {
   const [quantity, setQuantity] = useState('1');
   const [discountType, setDiscountType] = useState<'' | 'PERCENTAGE' | 'FIXED'>('');
   const [discountValue, setDiscountValue] = useState('');
+
+  // Pedidos por fora do iFood — todos opcionais, de propósito
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerNeighborhood, setCustomerNeighborhood] = useState('');
+  const [customerPostalCode, setCustomerPostalCode] = useState('');
+  const [salesChannel, setSalesChannel] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [marketingCampaignCode, setMarketingCampaignCode] = useState('');
+  const [notes, setNotes] = useState('');
+
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<Sale | null>(null);
@@ -59,6 +71,15 @@ export default function NewSalePage() {
           quantity,
           discountType: discountType || undefined,
           discountValue: discountType ? discountValue : undefined,
+          customerName: customerName || undefined,
+          customerPhone: customerPhone || undefined,
+          customerEmail: customerEmail || undefined,
+          customerNeighborhood: customerNeighborhood || undefined,
+          customerPostalCode: customerPostalCode || undefined,
+          salesChannel: salesChannel || undefined,
+          paymentMethod: paymentMethod || undefined,
+          marketingCampaignCode: marketingCampaignCode || undefined,
+          notes: notes || undefined,
         }),
       });
 
@@ -73,6 +94,15 @@ export default function NewSalePage() {
       setQuantity('1');
       setDiscountType('');
       setDiscountValue('');
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerEmail('');
+      setCustomerNeighborhood('');
+      setCustomerPostalCode('');
+      setSalesChannel('');
+      setPaymentMethod('');
+      setMarketingCampaignCode('');
+      setNotes('');
     } finally {
       setSaving(false);
     }
@@ -134,6 +164,69 @@ export default function NewSalePage() {
               </div>
 
               {error && <p className="text-sm text-danger">{error}</p>}
+
+              <div className="border-t border-border pt-4">
+                <p className="mb-1 text-sm font-medium text-foreground">Dados do pedido (opcional)</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Útil para pedidos que vieram por fora do iFood (WhatsApp, telefone, balcão). Nenhum
+                  campo aqui é obrigatório.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="sale-customer-name">Nome do cliente</Label>
+                    <Input id="sale-customer-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-customer-phone">Telefone</Label>
+                    <Input id="sale-customer-phone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Usado para reconhecer recompra" />
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-customer-email">E-mail</Label>
+                    <Input id="sale-customer-email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-customer-neighborhood">Bairro</Label>
+                    <Input id="sale-customer-neighborhood" value={customerNeighborhood} onChange={(e) => setCustomerNeighborhood(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-customer-postal">CEP</Label>
+                    <Input id="sale-customer-postal" value={customerPostalCode} onChange={(e) => setCustomerPostalCode(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-channel">Canal de venda</Label>
+                    <Select id="sale-channel" value={salesChannel} onChange={(e) => setSalesChannel(e.target.value)}>
+                      <option value="">Não informado</option>
+                      <option value="WHATSAPP">WhatsApp</option>
+                      <option value="INSTAGRAM">Instagram</option>
+                      <option value="TELEFONE">Telefone</option>
+                      <option value="PRESENCIAL">Presencial/Balcão</option>
+                      <option value="SITE_PROPRIO">Site próprio</option>
+                      <option value="OUTRO">Outro</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-payment">Método de pagamento</Label>
+                    <Select id="sale-payment" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                      <option value="">Não informado</option>
+                      <option value="DINHEIRO">Dinheiro</option>
+                      <option value="PIX">PIX</option>
+                      <option value="CARTAO_DEBITO">Cartão de débito</option>
+                      <option value="CARTAO_CREDITO">Cartão de crédito</option>
+                      <option value="VALE_REFEICAO">Vale-refeição</option>
+                      <option value="OUTRO">Outro</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="sale-campaign">Código de campanha</Label>
+                    <Input id="sale-campaign" value={marketingCampaignCode} onChange={(e) => setMarketingCampaignCode(e.target.value)} placeholder="Ex.: PRIMEIRA20" />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="sale-notes">Observações</Label>
+                    <Input id="sale-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex.: sem cebola, entregar na portaria" />
+                  </div>
+                </div>
+              </div>
 
               <Button type="submit" disabled={saving} className="self-start">
                 {saving ? 'Registrando…' : 'Registrar venda'}

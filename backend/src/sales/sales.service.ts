@@ -91,6 +91,8 @@ export class SalesService {
     }> = [];
 
     const sale = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const customerId = await this.findOrCreateCustomer(tx, dto, actor.organizationId);
+
       const created = await tx.sale.create({
         data: {
           organizationId: actor.organizationId,
@@ -107,6 +109,11 @@ export class SalesService {
           soldByUserId: actor.id,
           origin: internalOptions?.origin ?? 'MANUAL',
           externalOrderId: internalOptions?.externalOrderId,
+          customerId,
+          salesChannel: dto.salesChannel,
+          paymentMethod: dto.paymentMethod,
+          marketingCampaignCode: dto.marketingCampaignCode,
+          notes: dto.notes,
         },
       });
 
@@ -180,6 +187,51 @@ export class SalesService {
       throw new NotFoundException('Venda não encontrada.');
     }
     return sale;
+  }
+
+  /// Pedidos por fora do iFood (claude/pedidos-externos-plan.md): busca
+  /// cliente existente pelo telefone (dentro da organização) e
+  /// reaproveita, atualizando nome/e-mail/bairro/CEP se vierem
+  /// diferentes; cria um novo se não encontrar. Sem telefone
+  /// informado, retorna `undefined` — a venda fica sem cliente
+  /// vinculado, de propósito (nada é obrigatório nesta coleta).
+  private async findOrCreateCustomer(
+    tx: Prisma.TransactionClient,
+    dto: CreateSaleDto,
+    organizationId: string,
+  ): Promise<string | undefined> {
+    if (!dto.customerPhone) {
+      return undefined;
+    }
+
+    const existing = await tx.customer.findUnique({
+      where: { organizationId_phone: { organizationId, phone: dto.customerPhone } },
+    });
+
+    if (existing) {
+      const updated = await tx.customer.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.customerName ?? existing.name,
+          email: dto.customerEmail ?? existing.email,
+          neighborhood: dto.customerNeighborhood ?? existing.neighborhood,
+          postalCode: dto.customerPostalCode ?? existing.postalCode,
+        },
+      });
+      return updated.id;
+    }
+
+    const created = await tx.customer.create({
+      data: {
+        organizationId,
+        name: dto.customerName,
+        phone: dto.customerPhone,
+        email: dto.customerEmail,
+        neighborhood: dto.customerNeighborhood,
+        postalCode: dto.customerPostalCode,
+      },
+    });
+    return created.id;
   }
 
   private calculateDiscount(

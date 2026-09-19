@@ -51,6 +51,11 @@ describe('SalesService', () => {
         create: jest.fn().mockResolvedValue(saleCreated),
         update: jest.fn().mockResolvedValue({ ...saleCreated, hadInsufficientStock: true }),
       },
+      customer: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
     };
     prisma.$transaction.mockImplementation(async (fn: any) => fn(txClient));
     return txClient;
@@ -265,6 +270,152 @@ describe('SalesService', () => {
           actor,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('pedidos por fora do iFood (19/09/2026) — cliente e campos opcionais', () => {
+    const saleCreated = {
+      id: 'sale-1',
+      netAmount: { toString: () => '28.9000' },
+      saleDate: new Date(),
+    };
+
+    beforeEach(() => {
+      prisma.product.findFirst.mockResolvedValue(activeProduct);
+      fichaTecnicaService.findCurrentByProduct.mockResolvedValue(fichaComUmItem);
+      stockService.applyMovementInTransaction.mockResolvedValue({
+        wentNegative: false,
+        balance: { currentQuantity: 5 },
+        ingredientName: 'Carne Bovina',
+      });
+    });
+
+    it('SEM telefone informado: não cria nem vincula nenhum cliente — venda fica "anônima"', async () => {
+      const tx = mockTransaction(saleCreated);
+
+      await service.registerSale(
+        { businessUnitId: 'bu-1', productId: 'prod-1', quantity: '1' } as any,
+        actor,
+      );
+
+      expect(tx.customer.findUnique).not.toHaveBeenCalled();
+      expect(tx.customer.create).not.toHaveBeenCalled();
+      expect(tx.sale.create.mock.calls[0][0].data.customerId).toBeUndefined();
+    });
+
+    it('COM telefone e cliente NOVO: cria o cliente e vincula na venda', async () => {
+      const tx = mockTransaction(saleCreated);
+      tx.customer.findUnique.mockResolvedValue(null);
+      tx.customer.create.mockResolvedValue({ id: 'cust-novo' });
+
+      await service.registerSale(
+        {
+          businessUnitId: 'bu-1',
+          productId: 'prod-1',
+          quantity: '1',
+          customerName: 'Maria',
+          customerPhone: '11999998888',
+          customerEmail: 'maria@example.com',
+        } as any,
+        actor,
+      );
+
+      expect(tx.customer.findUnique).toHaveBeenCalledWith({
+        where: { organizationId_phone: { organizationId: 'org-1', phone: '11999998888' } },
+      });
+      expect(tx.customer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          organizationId: 'org-1',
+          name: 'Maria',
+          phone: '11999998888',
+          email: 'maria@example.com',
+        }),
+      });
+      expect(tx.sale.create.mock.calls[0][0].data.customerId).toBe('cust-novo');
+    });
+
+    it('COM telefone JÁ CADASTRADO: reaproveita o cliente existente, sem criar duplicado', async () => {
+      const tx = mockTransaction(saleCreated);
+      tx.customer.findUnique.mockResolvedValue({
+        id: 'cust-existente',
+        name: 'Maria Antiga',
+        email: null,
+        neighborhood: null,
+        postalCode: null,
+      });
+      tx.customer.update.mockResolvedValue({ id: 'cust-existente' });
+
+      await service.registerSale(
+        {
+          businessUnitId: 'bu-1',
+          productId: 'prod-1',
+          quantity: '1',
+          customerPhone: '11999998888',
+        } as any,
+        actor,
+      );
+
+      expect(tx.customer.create).not.toHaveBeenCalled();
+      expect(tx.sale.create.mock.calls[0][0].data.customerId).toBe('cust-existente');
+    });
+
+    it('cliente existente: atualiza nome/e-mail quando vierem diferentes, mantém o que já tinha quando não vier', async () => {
+      const tx = mockTransaction(saleCreated);
+      tx.customer.findUnique.mockResolvedValue({
+        id: 'cust-existente',
+        name: 'Nome Antigo',
+        email: 'antigo@example.com',
+        neighborhood: 'Centro',
+        postalCode: null,
+      });
+      tx.customer.update.mockResolvedValue({ id: 'cust-existente' });
+
+      await service.registerSale(
+        {
+          businessUnitId: 'bu-1',
+          productId: 'prod-1',
+          quantity: '1',
+          customerPhone: '11999998888',
+          customerName: 'Nome Novo', // só o nome veio atualizado
+        } as any,
+        actor,
+      );
+
+      expect(tx.customer.update).toHaveBeenCalledWith({
+        where: { id: 'cust-existente' },
+        data: {
+          name: 'Nome Novo',
+          email: 'antigo@example.com', // mantido, não veio valor novo
+          neighborhood: 'Centro', // mantido
+          postalCode: null,
+        },
+      });
+    });
+
+    it('salva canal de venda, método de pagamento, código de campanha e observações na venda', async () => {
+      const tx = mockTransaction(saleCreated);
+
+      await service.registerSale(
+        {
+          businessUnitId: 'bu-1',
+          productId: 'prod-1',
+          quantity: '1',
+          salesChannel: 'WHATSAPP',
+          paymentMethod: 'PIX',
+          marketingCampaignCode: 'PRIMEIRA20',
+          notes: 'Sem cebola',
+        } as any,
+        actor,
+      );
+
+      expect(tx.sale.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          salesChannel: 'WHATSAPP',
+          paymentMethod: 'PIX',
+          marketingCampaignCode: 'PRIMEIRA20',
+          notes: 'Sem cebola',
+        }),
+      });
     });
   });
 });

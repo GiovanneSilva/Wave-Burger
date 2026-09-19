@@ -34,6 +34,7 @@ model Organization {
   purchases     Purchase[]
   financialEntries FinancialEntry[]
   sales         Sale[]
+  customers     Customer[]
 
   @@map("organizations")
 }
@@ -636,6 +637,52 @@ enum SaleOrigin {
   IFOOD
 }
 
+enum SalesChannel {
+  WHATSAPP
+  INSTAGRAM
+  TELEFONE
+  PRESENCIAL
+  SITE_PROPRIO
+  OUTRO
+}
+
+enum PaymentMethod {
+  DINHEIRO
+  PIX
+  CARTAO_DEBITO
+  CARTAO_CREDITO
+  VALE_REFEICAO
+  OUTRO
+}
+
+/// Cliente identificado num pedido registrado por fora do iFood
+/// (WhatsApp, telefone, balcão) — ver claude/pedidos-externos-plan.md.
+/// TODO campo é opcional de propósito: a coleta desses dados ainda está
+/// em fase de adaptação, e nada deve travar o registro de uma venda por
+/// falta de informação do cliente.
+///
+/// `phone` é o identificador natural de recompra quando informado — mas
+/// como nada é obrigatório, uma venda sem telefone simplesmente não
+/// vincula a nenhum `Customer` (fica "anônima", como já acontecia antes
+/// deste modelo existir).
+model Customer {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String?
+  phone          String?
+  email          String?
+  neighborhood   String?
+  postalCode     String?  @map("postal_code")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  sales        Sale[]
+
+  @@unique([organizationId, phone])
+  @@map("customers")
+}
+
 /// Venda (Etapa 16) — escopo confirmado explicitamente com o usuário
 /// antes da implementação (PD-010, agora resolvido): um único produto
 /// por venda (produto + quantidade + preço + data), com desconto simples
@@ -659,6 +706,15 @@ enum SaleOrigin {
 /// `origin` nunca é exposto no DTO público (`POST /sales`) — só
 /// preenchido internamente por quem chama o serviço diretamente (ex.:
 /// o futuro listener de pedidos do iFood), nunca pelo usuário via HTTP.
+///
+/// customerId/salesChannel/paymentMethod/marketingCampaignCode/notes
+/// (pedidos por fora do iFood, claude/pedidos-externos-plan.md): todos
+/// opcionais, de propósito — a coleta desses dados está em fase de
+/// adaptação. `salesChannel` é conceitualmente diferente de `origin`:
+/// `origin` distingue MANUAL vs IFOOD (como a venda foi criada no
+/// sistema); `salesChannel` refina POR ONDE o cliente fez o pedido
+/// manual (WhatsApp, Instagram, telefone, balcão) — nunca se aplica a
+/// vendas com origin=IFOOD.
 model Sale {
   id                   String        @id @default(uuid()) @db.Uuid
   organizationId       String        @map("organization_id") @db.Uuid
@@ -675,12 +731,18 @@ model Sale {
   hadInsufficientStock Boolean       @default(false) @map("had_insufficient_stock")
   origin               SaleOrigin    @default(MANUAL)
   externalOrderId      String?       @map("external_order_id")
+  customerId           String?       @map("customer_id") @db.Uuid
+  salesChannel         SalesChannel? @map("sales_channel")
+  paymentMethod        PaymentMethod? @map("payment_method")
+  marketingCampaignCode String?      @map("marketing_campaign_code")
+  notes                String?
   soldByUserId         String        @map("sold_by_user_id") @db.Uuid
   createdAt            DateTime      @default(now()) @map("created_at")
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   businessUnit BusinessUnit    @relation(fields: [businessUnitId], references: [id], onDelete: Restrict)
   product      Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  customer     Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   soldByUser   User            @relation(fields: [soldByUserId], references: [id], onDelete: Restrict)
   stockMovements  StockMovement[]
   financialEntries FinancialEntry[]
@@ -690,5 +752,6 @@ model Sale {
   @@index([productId])
   @@index([saleDate])
   @@index([externalOrderId])
+  @@index([customerId])
   @@map("sales")
 }
