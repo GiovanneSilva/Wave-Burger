@@ -20,6 +20,7 @@ describe('AnalyticsService', () => {
       purchaseItem: { findMany: jest.fn() },
       fichaTecnica: { findFirst: jest.fn() },
       stockBalance: { findUnique: jest.fn() },
+      sale: { groupBy: jest.fn() },
     };
     fichaTecnicaService = { getCurrentCostSummary: jest.fn() };
     stockService = {
@@ -86,6 +87,131 @@ describe('AnalyticsService', () => {
       const result = await service.getMostProfitableProducts('org-1', 2);
 
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('getMenuEngineeringMatrix — Engenharia de Cardápio (19/09/2026)', () => {
+    const FROM = new Date('2026-08-20');
+    const TO = new Date('2026-09-19');
+
+    function mockProduct(id: string, name: string) {
+      return { id, name };
+    }
+
+    function mockSummary(estimatedProfit: number, frozenTotalCost: number, liveTotalCost: number) {
+      return {
+        frozenAtVersionCreation: { totalCost: frozenTotalCost },
+        currentLive: { totalCost: liveTotalCost, estimatedProfit },
+        costDrifted: frozenTotalCost !== liveTotalCost,
+      };
+    }
+
+    it('EXEMPLO COMPLETO: classifica os 4 quadrantes corretamente (Estrela/Cavalo de Carga/Enigma/Cão)', async () => {
+      // Produto A: popular (100) e lucrativo (R$20) -> Estrela
+      // Produto B: popular (80) mas margem fraca (R$5) -> Cavalo de Carga
+      // Produto C: pouco popular (10) mas lucrativo (R$25) -> Enigma
+      // Produto D: pouco popular (5) e margem fraca (R$3) -> Cão
+      // média popularidade = (100+80+10+5)/4 = 48,75 | média margem = (20+5+25+3)/4 = 13,25
+      prisma.product.findMany.mockResolvedValue([
+        mockProduct('prod-a', 'Produto A'),
+        mockProduct('prod-b', 'Produto B'),
+        mockProduct('prod-c', 'Produto C'),
+        mockProduct('prod-d', 'Produto D'),
+      ]);
+      prisma.sale.groupBy.mockResolvedValue([
+        { productId: 'prod-a', _sum: { quantity: 100 } },
+        { productId: 'prod-b', _sum: { quantity: 80 } },
+        { productId: 'prod-c', _sum: { quantity: 10 } },
+        { productId: 'prod-d', _sum: { quantity: 5 } },
+      ]);
+      fichaTecnicaService.getCurrentCostSummary.mockImplementation(async (productId: string) => {
+        const map: Record<string, any> = {
+          'prod-a': mockSummary(20, 10, 10),
+          'prod-b': mockSummary(5, 10, 10),
+          'prod-c': mockSummary(25, 10, 10),
+          'prod-d': mockSummary(3, 10, 10),
+        };
+        return map[productId];
+      });
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO);
+
+      expect(result.averagePopularity).toBe(48.75);
+      expect(result.averageContributionMargin).toBe(13.25);
+
+      const byId = Object.fromEntries(result.items.map((i: any) => [i.productId, i]));
+      expect(byId['prod-a'].category).toBe('STAR');
+      expect(byId['prod-b'].category).toBe('PLOWHORSE');
+      expect(byId['prod-c'].category).toBe('PUZZLE');
+      expect(byId['prod-d'].category).toBe('DOG');
+    });
+
+    it('sinaliza needsAttention quando a deriva de custo ultrapassa o limite (padrão 10%)', async () => {
+      prisma.product.findMany.mockResolvedValue([mockProduct('prod-1', 'X')]);
+      prisma.sale.groupBy.mockResolvedValue([]);
+      // custo congelado R$10, custo atual R$12 -> deriva de 20%
+      fichaTecnicaService.getCurrentCostSummary.mockResolvedValue(mockSummary(10, 10, 12));
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO);
+
+      expect(result.items[0].driftPercentage).toBeCloseTo(20, 4);
+      expect(result.items[0].needsAttention).toBe(true);
+    });
+
+    it('não sinaliza needsAttention quando a deriva fica abaixo do limite', async () => {
+      prisma.product.findMany.mockResolvedValue([mockProduct('prod-1', 'X')]);
+      prisma.sale.groupBy.mockResolvedValue([]);
+      // custo congelado R$10, custo atual R$10,50 -> deriva de 5%
+      fichaTecnicaService.getCurrentCostSummary.mockResolvedValue(mockSummary(10, 10, 10.5));
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO);
+
+      expect(result.items[0].needsAttention).toBe(false);
+    });
+
+    it('aceita um limite de deriva customizado', async () => {
+      prisma.product.findMany.mockResolvedValue([mockProduct('prod-1', 'X')]);
+      prisma.sale.groupBy.mockResolvedValue([]);
+      fichaTecnicaService.getCurrentCostSummary.mockResolvedValue(mockSummary(10, 10, 10.5)); // 5% de deriva
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO, 3); // limite mais rígido: 3%
+
+      expect(result.items[0].needsAttention).toBe(true);
+    });
+
+    it('produto sem vendas no período tem popularidade 0, não quebra o cálculo', async () => {
+      prisma.product.findMany.mockResolvedValue([mockProduct('prod-1', 'X')]);
+      prisma.sale.groupBy.mockResolvedValue([]); // nenhuma venda no período
+      fichaTecnicaService.getCurrentCostSummary.mockResolvedValue(mockSummary(10, 10, 10));
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO);
+
+      expect(result.items[0].popularity).toBe(0);
+    });
+
+    it('exclui produtos sem preço de venda definido (estimatedProfit null)', async () => {
+      prisma.product.findMany.mockResolvedValue([mockProduct('prod-1', 'Rascunho')]);
+      prisma.sale.groupBy.mockResolvedValue([]);
+      fichaTecnicaService.getCurrentCostSummary.mockResolvedValue({
+        frozenAtVersionCreation: { totalCost: 10 },
+        currentLive: { totalCost: 10, estimatedProfit: null },
+        costDrifted: false,
+      });
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO);
+
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('não quebra quando não há nenhum produto ativo com ficha técnica', async () => {
+      prisma.product.findMany.mockResolvedValue([]);
+      prisma.sale.groupBy.mockResolvedValue([]);
+
+      const result = await service.getMenuEngineeringMatrix('org-1', FROM, TO);
+
+      expect(result.items).toEqual([]);
+      expect(result.averagePopularity).toBe(0);
+      expect(result.averageContributionMargin).toBe(0);
     });
   });
 

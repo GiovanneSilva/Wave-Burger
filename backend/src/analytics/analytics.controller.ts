@@ -61,4 +61,20 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getDeliverableQuantities(businessUnitId, user.organizationId);
   }
+
+  @Get('menu-engineering')
+  @RequirePermissions(PERMISSIONS.FINANCIAL_READ)
+  getMenuEngineeringMatrix(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('driftThresholdPercent') driftThresholdPercent: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.analyticsService.getMenuEngineeringMatrix(
+      user.organizationId,
+      new Date(from),
+      new Date(to),
+      driftThresholdPercent ? Number(driftThresholdPercent) : undefined,
+    );
+  }
 }

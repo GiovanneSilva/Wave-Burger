@@ -200,6 +200,19 @@ export interface Purchase {
   items: PurchaseItem[];
 }
 
+export interface Customer {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  neighborhood: string | null;
+  postalCode: string | null;
+  whatsappOptIn: boolean;
+  emailOptIn: boolean;
+  optOutAt: string | null;
+  createdAt: string;
+}
+
 export interface Sale {
   id: string;
   businessUnitId: string;
@@ -285,6 +298,27 @@ export interface SupplierAnalysis {
     isPreferred: boolean;
     supplier: { id: string; name: string };
   }>;
+}
+
+export type MenuEngineeringCategory = 'STAR' | 'PLOWHORSE' | 'PUZZLE' | 'DOG';
+
+export interface MenuEngineeringItem {
+  productId: string;
+  productName: string;
+  popularity: number;
+  contributionMargin: number;
+  costDrifted: boolean;
+  driftPercentage: number;
+  needsAttention: boolean;
+  category: MenuEngineeringCategory;
+}
+
+export interface MenuEngineeringMatrix {
+  period: { from: string; to: string };
+  averagePopularity: number;
+  averageContributionMargin: number;
+  driftThresholdPercent: number;
+  items: MenuEngineeringItem[];
 }
 
 export interface DeliverableQuantity {

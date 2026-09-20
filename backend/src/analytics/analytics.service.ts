@@ -85,6 +85,116 @@ export class AnalyticsService {
       .slice(0, limit);
   }
 
+  /// Engenharia de Cardápio (claude/engenharia-cardapio-plan.md) —
+  /// matriz de Kasavana & Smith (1982), adaptada da matriz de
+  /// crescimento do BCG: classifica cada produto por popularidade
+  /// (quantidade vendida no período) × margem de contribuição (preço −
+  /// custo ATUAL dos ingredientes, não o congelado da versão vigente da
+  /// ficha técnica). A média é relativa ao próprio cardápio, não um
+  /// número fixo da indústria — por isso recalculada a cada consulta.
+  ///
+  ///   Estrela        — popularidade e margem acima da média
+  ///   Cavalo de Carga — popularidade acima, margem abaixo (candidato
+  ///                     principal a reprecificar)
+  ///   Enigma         — margem acima, popularidade abaixo (reposicionar
+  ///                     no cardápio, não repreçar)
+  ///   Cão            — os dois abaixo da média
+  ///
+  /// Reaproveita `getCurrentCostSummary` (já existia, RF-004) tanto para
+  /// a margem quanto para a deriva de custo (`costDrifted`) — nenhum
+  /// cálculo de custo novo, só a camada de classificação por cima.
+  ///
+  /// Limitação conhecida, sinalizada explicitamente no retorno: a
+  /// margem aqui é bruta — ainda não desconta a comissão real do iFood
+  /// (depende da Fase 4 da integração iFood, pausada aguardando
+  /// homologação financeira própria — ver claude/ifood-integration-plan.md).
+  async getMenuEngineeringMatrix(
+    organizationId: string,
+    from: Date,
+    to: Date,
+    driftThresholdPercent = 10,
+  ) {
+    const productsWithFicha = await this.prisma.product.findMany({
+      where: {
+        organizationId,
+        status: 'ACTIVE',
+        fichasTecnicas: { some: { isCurrent: true } },
+      },
+      select: { id: true, name: true },
+    });
+
+    const salesByProduct = await this.prisma.sale.groupBy({
+      by: ['productId'],
+      where: { organizationId, saleDate: { gte: from, lte: to } },
+      _sum: { quantity: true },
+    });
+    const popularityByProduct = new Map<string, number>(
+      salesByProduct.map((s: any) => [s.productId, Number(s._sum.quantity ?? 0)]),
+    );
+
+    const rawItems = await Promise.all(
+      productsWithFicha.map(async (product: { id: string; name: string }) => {
+        const summary = await this.fichaTecnicaService.getCurrentCostSummary(
+          product.id,
+          organizationId,
+        );
+
+        const frozenCost = Number(summary.frozenAtVersionCreation.totalCost);
+        const liveCost = summary.currentLive.totalCost;
+        const driftPercentage =
+          frozenCost > 0 ? round2((Math.abs(liveCost - frozenCost) / frozenCost) * 100) : 0;
+
+        return {
+          productId: product.id,
+          productName: product.name,
+          popularity: popularityByProduct.get(product.id) ?? 0,
+          contributionMargin: summary.currentLive.estimatedProfit,
+          costDrifted: summary.costDrifted,
+          driftPercentage,
+        };
+      }),
+    );
+
+    // Produtos sem preço de venda válido não têm margem calculável —
+    // mesmo critério já usado em getMostProfitableProducts.
+    const items = rawItems.filter((i: any) => i.contributionMargin !== null);
+
+    const avgPopularity =
+      items.length > 0
+        ? items.reduce((sum: number, i: any) => sum + i.popularity, 0) / items.length
+        : 0;
+    const avgContributionMargin =
+      items.length > 0
+        ? items.reduce((sum: number, i: any) => sum + i.contributionMargin, 0) / items.length
+        : 0;
+
+    const classified = items.map((i: any) => {
+      const popularAboveAvg = i.popularity >= avgPopularity;
+      const marginAboveAvg = i.contributionMargin >= avgContributionMargin;
+      const category = popularAboveAvg
+        ? marginAboveAvg
+          ? 'STAR'
+          : 'PLOWHORSE'
+        : marginAboveAvg
+          ? 'PUZZLE'
+          : 'DOG';
+
+      return {
+        ...i,
+        needsAttention: i.driftPercentage >= driftThresholdPercent,
+        category,
+      };
+    });
+
+    return {
+      period: { from, to },
+      averagePopularity: round2(avgPopularity),
+      averageContributionMargin: round2(avgContributionMargin),
+      driftThresholdPercent,
+      items: classified,
+    };
+  }
+
   /// RF-026: dashboard de estoque — inteiramente derivado do módulo de
   /// Estoque (Etapa 13), sem lógica nova além da composição.
   async getStockDashboard(businessUnitId: string, organizationId: string, from: Date, to: Date) {

@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Star } from 'lucide-react';
+import { Star, AlertTriangle } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/wave/page-header';
 import { DataTable, type DataTableColumn } from '@/components/wave/data-table';
 import { MoneyValue } from '@/components/wave/money-value';
+import { StatusBadge } from '@/components/wave/status-badge';
 import { EmptyState } from '@/components/wave/empty-state';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/components/auth/auth-provider';
-import type { ConsumptionItem, SupplierAnalysis, Ingredient } from '@/lib/types';
+import type { ConsumptionItem, SupplierAnalysis, Ingredient, MenuEngineeringMatrix } from '@/lib/types';
 
 function last30Days() {
   const to = new Date();
@@ -34,6 +35,10 @@ export default function AnalyticsPage() {
   const [supplierAnalysis, setSupplierAnalysis] = useState<SupplierAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  const [driftThreshold, setDriftThreshold] = useState('10');
+  const [menuMatrix, setMenuMatrix] = useState<MenuEngineeringMatrix | null>(null);
+  const [menuMatrixError, setMenuMatrixError] = useState<string | null>(null);
+
   useEffect(() => {
     fetch('/api/ingredients').then(async (res) => {
       if (res.ok) setIngredients(await res.json());
@@ -52,6 +57,20 @@ export default function AnalyticsPage() {
       }
     });
   }, [businessUnitId, from, to]);
+
+  useEffect(() => {
+    setMenuMatrixError(null);
+    const threshold = Number(driftThreshold) || 10;
+    fetch(`/api/analytics/menu-engineering?from=${from}&to=${to}&driftThresholdPercent=${threshold}`).then(
+      async (res) => {
+        if (res.ok) {
+          setMenuMatrix(await res.json());
+        } else {
+          setMenuMatrixError('Não foi possível carregar a Engenharia de Cardápio.');
+        }
+      },
+    );
+  }, [from, to, driftThreshold]);
 
   useEffect(() => {
     if (!selectedIngredientId) {
@@ -74,11 +93,53 @@ export default function AnalyticsPage() {
     { key: 'total', header: 'Total consumido', align: 'right', render: (c) => c.totalConsumed.toString() },
   ];
 
+  const CATEGORY_LABELS: Record<string, string> = {
+    STAR: 'Estrela',
+    PLOWHORSE: 'Cavalo de Carga',
+    PUZZLE: 'Enigma',
+    DOG: 'Cão',
+  };
+  const CATEGORY_TONE: Record<string, 'success' | 'warning' | 'neutral' | 'danger'> = {
+    STAR: 'success',
+    PLOWHORSE: 'warning',
+    PUZZLE: 'neutral',
+    DOG: 'danger',
+  };
+
+  const menuColumns: DataTableColumn<MenuEngineeringMatrix['items'][number]>[] = [
+    { key: 'name', header: 'Produto', render: (i) => <span className="font-medium">{i.productName}</span> },
+    {
+      key: 'category',
+      header: 'Categoria',
+      render: (i) => <StatusBadge label={CATEGORY_LABELS[i.category]} tone={CATEGORY_TONE[i.category]} />,
+    },
+    { key: 'popularity', header: 'Vendido no período', align: 'right', render: (i) => i.popularity.toString() },
+    {
+      key: 'margin',
+      header: 'Margem de contribuição',
+      align: 'right',
+      render: (i) => <MoneyValue value={i.contributionMargin} />,
+    },
+    {
+      key: 'drift',
+      header: 'Deriva de custo',
+      align: 'right',
+      render: (i) =>
+        i.needsAttention ? (
+          <span className="flex items-center justify-end gap-1 text-warning">
+            <AlertTriangle className="h-3.5 w-3.5" /> {i.driftPercentage.toFixed(1)}%
+          </span>
+        ) : (
+          <span className="text-muted-foreground">{i.driftPercentage.toFixed(1)}%</span>
+        ),
+    },
+  ];
+
   return (
     <AppShell>
       <PageHeader
         title="BI / Indicadores"
-        description="Consumo de ingredientes e análise de preços por fornecedor."
+        description="Consumo de ingredientes, análise de preços por fornecedor e engenharia de cardápio."
       />
 
       <div className="mb-8">
@@ -225,6 +286,49 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
           </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Engenharia de Cardápio</p>
+            <p className="text-xs text-muted-foreground">
+              Classificação de cada produto por popularidade × margem, no mesmo período selecionado acima.
+              Margem aqui é bruta — ainda não desconta a comissão real do iFood (depende da homologação
+              financeira, ainda pendente).
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="drift-threshold">Limite de deriva de custo (%)</Label>
+            <Input
+              id="drift-threshold"
+              type="number"
+              min="1"
+              value={driftThreshold}
+              onChange={(e) => setDriftThreshold(e.target.value)}
+              className="w-28"
+            />
+          </div>
+        </div>
+
+        {menuMatrixError && <EmptyState title="Não foi possível carregar" description={menuMatrixError} />}
+
+        {!menuMatrixError && menuMatrix && (
+          <>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Média do cardápio no período: {menuMatrix.averagePopularity.toFixed(1)} unidades vendidas ·{' '}
+              <MoneyValue value={menuMatrix.averageContributionMargin} /> de margem
+            </p>
+            {menuMatrix.items.length === 0 ? (
+              <EmptyState
+                title="Nenhum produto com ficha técnica ativa"
+                description="Cadastre uma ficha técnica para pelo menos um produto ativo para ver a matriz."
+              />
+            ) : (
+              <DataTable columns={menuColumns} data={menuMatrix.items} rowKey={(i) => i.productId} />
+            )}
+          </>
         )}
       </div>
     </AppShell>
