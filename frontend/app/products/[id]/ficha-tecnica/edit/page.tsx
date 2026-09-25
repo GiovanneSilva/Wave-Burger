@@ -41,14 +41,22 @@ export default function EditFichaTecnicaPage() {
   const [simulationError, setSimulationError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Importar ficha técnica de outro produto
+  const [otherProducts, setOtherProducts] = useState<Product[]>([]);
+  const [importFromProductId, setImportFromProductId] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      const [productRes, ingredientsRes, fichaRes] = await Promise.all([
+      const [productRes, ingredientsRes, fichaRes, productsRes] = await Promise.all([
         fetch(`/api/products/${productId}`),
         fetch('/api/ingredients'),
         fetch(`/api/products/${productId}/ficha-tecnica`),
+        fetch('/api/products'),
       ]);
 
       if (cancelled) return;
@@ -57,6 +65,10 @@ export default function EditFichaTecnicaPage() {
       if (ingredientsRes.ok) {
         const all: Ingredient[] = await ingredientsRes.json();
         setIngredients(all.filter((i) => i.isActive));
+      }
+      if (productsRes.ok) {
+        const allProducts: Product[] = await productsRes.json();
+        setOtherProducts(allProducts.filter((p) => p.id !== productId && p.status !== 'INACTIVE'));
       }
       if (fichaRes.ok) {
         const ficha: FichaTecnicaVersion = await fichaRes.json();
@@ -86,6 +98,43 @@ export default function EditFichaTecnicaPage() {
     () => rows.filter((r) => r.ingredientId && r.quantity && r.unit),
     [rows],
   );
+
+  async function handleImport() {
+    setImportError(null);
+    setImportSuccess(null);
+
+    if (!importFromProductId) {
+      setImportError('Escolha um produto para importar.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/products/${importFromProductId}/ficha-tecnica`);
+      if (!res.ok) {
+        setImportError('Esse produto ainda não tem ficha técnica cadastrada.');
+        return;
+      }
+
+      const ficha: FichaTecnicaVersion = await res.json();
+      setRows(
+        ficha.items.map((item) => ({
+          key: crypto.randomUUID(),
+          ingredientId: item.ingredientId,
+          quantity: item.quantity,
+          unit: item.unit,
+          lossPercentage: item.lossPercentage !== '0' ? item.lossPercentage : '',
+        })),
+      );
+
+      const sourceName = otherProducts.find((p) => p.id === importFromProductId)?.name ?? 'produto selecionado';
+      setImportSuccess(
+        `${ficha.items.length} ingrediente(s) importado(s) de "${sourceName}" — revise as quantidades antes de salvar.`,
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
 
   useEffect(() => {
     if (validRows.length === 0) {
@@ -183,6 +232,37 @@ export default function EditFichaTecnicaPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-3 lg:col-span-2">
+          {otherProducts.length > 0 && (
+            <Card>
+              <CardContent className="flex flex-wrap items-end gap-2 pt-5">
+                <div className="min-w-[220px] flex-1">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Importar ficha técnica de outro produto
+                  </label>
+                  <Select value={importFromProductId} onChange={(e) => setImportFromProductId(e.target.value)}>
+                    <option value="">Selecione um produto…</option>
+                    {otherProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <Button type="button" variant="secondary" onClick={handleImport} disabled={importing}>
+                  {importing ? 'Importando…' : 'Importar'}
+                </Button>
+                {(importError || importSuccess) && (
+                  <p className={`w-full text-xs ${importError ? 'text-danger' : 'text-success'}`}>
+                    {importError ?? importSuccess}
+                  </p>
+                )}
+                <p className="w-full text-xs text-muted-foreground">
+                  Isso substitui as linhas abaixo pelos ingredientes do produto escolhido — revise antes de salvar.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {rows.map((row) => {
             const itemResult = simulation?.items.find(
               (i) => i.ingredientId === row.ingredientId && i.quantity === row.quantity && i.unit === row.unit,
